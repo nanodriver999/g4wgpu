@@ -20,6 +20,12 @@ struct TrackBatch {
 
   std::vector<std::uint32_t> particle_id;
   std::vector<std::uint32_t> material_id;
+
+  // Stable per-track RNG stream identity. This is separate from the
+  // monotonically increasing counter so batching/compaction does not
+  // change the generated sequence.
+  std::vector<std::uint32_t> rng_stream_lo;
+  std::vector<std::uint32_t> rng_stream_hi;
   std::vector<std::uint32_t> rng_counter_lo;
   std::vector<std::uint32_t> rng_counter_hi;
   std::vector<std::uint32_t> status;
