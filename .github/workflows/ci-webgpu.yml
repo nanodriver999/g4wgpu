@@ -73,12 +73,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Restore pinned Geant4 install
+        id: geant4-cache
+        uses: actions/cache@v4
+        with:
+          path: /tmp/geant4-install
+          key: geant4-${{ runner.os }}-f3d5293d384757b8a228a099898b2b87cfa4023c
+
       - name: Install Geant4 build prerequisites
+        if: steps.geant4-cache.outputs.cache-hit != 'true'
         run: |
           sudo apt-get update
           sudo apt-get install -y libexpat1-dev
 
       - name: Build pinned Geant4 fork
+        if: steps.geant4-cache.outputs.cache-hit != 'true'
         shell: bash
         run: |
           git clone https://github.com/nanodriver999/geant4.git /tmp/geant4
