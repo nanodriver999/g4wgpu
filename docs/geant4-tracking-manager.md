@@ -85,3 +85,15 @@ cmake -S . -B build-g4 \
 ```
 
 The core project remains buildable without Geant4.
+
+
+## Threading scope
+
+The tracking manager owns mutable per-event buffers. The intended Geant4 MT
+model is therefore one `G4WgpuTrackingManager` instance per worker thread,
+not one shared instance across workers.
+
+The current CI lifecycle test uses a single `G4RunManager` and does not yet
+claim multithreaded transport equivalence. A dedicated worker-thread
+registration/integration test is required before MT support is considered
+validated.
