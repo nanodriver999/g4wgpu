@@ -1,11 +1,11 @@
 #include "g4wgpu/geant4/G4WgpuTrackingManager.hh"
 
 #include <cstdint>
-#include <exception>
 #include <stdexcept>
 
 #include "G4Event.hh"
 #include "G4EventManager.hh"
+#include "G4Exception.hh"
 #include "G4Gamma.hh"
 #include "G4ParticleDefinition.hh"
 #include "G4ProcessManager.hh"
@@ -74,12 +74,18 @@ G4WgpuTrackingManager::G4WgpuTrackingManager(
 }
 
 G4WgpuTrackingManager::~G4WgpuTrackingManager() {
-  // Geant4 owns tracks handed to a custom tracking manager only until the
-  // hand-over call. Once buffered, this manager owns them. Destruction during
-  // an active event is therefore a lifecycle error rather than something that
-  // should silently delete tracks.
   if (!buffered_tracks_.empty()) {
-    std::terminate();
+    G4Exception(
+        "G4WgpuTrackingManager::~G4WgpuTrackingManager",
+        "G4WGPU001",
+        JustWarning,
+        "Destroying the tracking manager with pending tracks; "
+        "the owned pending tracks will be deleted.");
+
+    for (auto* track : buffered_tracks_) {
+      delete track;
+    }
+    buffered_tracks_.clear();
   }
 }
 
