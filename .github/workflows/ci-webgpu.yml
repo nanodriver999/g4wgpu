@@ -103,6 +103,13 @@ jobs:
           cmake --build /tmp/geant4-build -j2
           cmake --install /tmp/geant4-build
 
+      - name: Save pinned Geant4 install
+        if: steps.geant4-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: /tmp/geant4-install
+          key: geant4-${{ runner.os }}-f3d5293d384757b8a228a099898b2b87cfa4023c
+
       - name: Configure g4wgpu with Geant4
         shell: bash
         run: |
