@@ -90,5 +90,89 @@ int main() {
     }
   }
 
+  {
+    constexpr double incident = 1.0;
+    constexpr double electron_mass_mev = 0.51099895;
+    constexpr std::size_t integration_bins = 20000;
+
+    double weight_sum = 0.0;
+    double weighted_epsilon = 0.0;
+    double weighted_mu = 0.0;
+
+    const double k = incident / electron_mass_mev;
+    for (std::size_t i = 0; i < integration_bins; ++i) {
+      const double mu =
+          -1.0 +
+          (static_cast<double>(i) + 0.5) *
+              (2.0 / static_cast<double>(integration_bins));
+      const double epsilon =
+          1.0 / (1.0 + k * (1.0 - mu));
+      const double sin2 = 1.0 - mu * mu;
+      const double weight =
+          epsilon * epsilon *
+          (epsilon + 1.0 / epsilon - sin2);
+
+      weight_sum += weight;
+      weighted_epsilon += weight * epsilon;
+      weighted_mu += weight * mu;
+    }
+
+    const double expected_mean_epsilon =
+        weighted_epsilon / weight_sum;
+    const double expected_mean_mu =
+        weighted_mu / weight_sum;
+
+    constexpr std::uint32_t sample_count = 30000u;
+    double sample_epsilon_sum = 0.0;
+    double sample_mu_sum = 0.0;
+
+    for (std::uint32_t i = 0; i < sample_count; ++i) {
+      g4wgpu::RngAddress rng{
+          i + 1u, 0x6b6eu, 0u, 0u};
+      const auto sample =
+          g4wgpu::sample_klein_nishina(incident, rng);
+
+      if (!sample.accepted) {
+        std::cerr << "distribution sample was not accepted\n";
+        return EXIT_FAILURE;
+      }
+
+      sample_epsilon_sum +=
+          sample.scattered_gamma_energy_mev / incident;
+      sample_mu_sum += sample.cos_theta;
+    }
+
+    const double sampled_mean_epsilon =
+        sample_epsilon_sum /
+        static_cast<double>(sample_count);
+    const double sampled_mean_mu =
+        sample_mu_sum /
+        static_cast<double>(sample_count);
+
+    if (!close_enough(
+            sampled_mean_epsilon,
+            expected_mean_epsilon,
+            5.0e-3)) {
+      std::cerr
+          << "mean scattered-energy fraction differs from "
+          << "Klein-Nishina integral: expected "
+          << expected_mean_epsilon << ", got "
+          << sampled_mean_epsilon << '\n';
+      return EXIT_FAILURE;
+    }
+
+    if (!close_enough(
+            sampled_mean_mu,
+            expected_mean_mu,
+            5.0e-3)) {
+      std::cerr
+          << "mean cos(theta) differs from "
+          << "Klein-Nishina integral: expected "
+          << expected_mean_mu << ", got "
+          << sampled_mean_mu << '\n';
+      return EXIT_FAILURE;
+    }
+  }
+
   return EXIT_SUCCESS;
 }
