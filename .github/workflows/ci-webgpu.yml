@@ -1,0 +1,53 @@
+name: WebGPU native build
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  cpu:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure CPU build
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build CPU path
+        run: cmake --build build -j2
+      - name: Test CPU path
+        run: ctest --test-dir build --output-on-failure
+
+  webgpu-compile-link:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build pinned wgpu-native
+        shell: bash
+        run: |
+          git clone https://github.com/gfx-rs/wgpu-native.git /tmp/wgpu-native
+          cd /tmp/wgpu-native
+          git checkout 250eeb67f8d091bf7dbc4fc253293d10900cff64
+          git submodule update --init --recursive
+          make lib-native-release
+
+      - name: Configure WebGPU build
+        shell: bash
+        run: |
+          cmake -S . -B build-wgpu \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DG4WGPU_ENABLE_WEBGPU=ON \
+            -DG4WGPU_RUN_GPU_TESTS=ON \
+            -DG4WGPU_WGPU_NATIVE_INCLUDE_DIR=/tmp/wgpu-native/ffi \
+            -DG4WGPU_WEBGPU_HEADER_DIR=/tmp/wgpu-native/ffi/webgpu-headers \
+            -DG4WGPU_WGPU_NATIVE_LIBRARY=/tmp/wgpu-native/target/release/libwgpu_native.so
+
+      - name: Compile and link WebGPU backend
+        run: cmake --build build-wgpu --target g4wgpu_webgpu_backend_test -j2
+
+      - name: Run CPU regression in WebGPU build
+        run: ctest --test-dir build-wgpu -R '^g4wgpu\.cpu_backend$' --output-on-failure
