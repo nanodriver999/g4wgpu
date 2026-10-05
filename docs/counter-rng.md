@@ -32,7 +32,8 @@ The CPU implementation uses only wrapping 32-bit integer operations.
 result is representable by portable WGSL `f32`.
 
 A fixed reference vector is included in unit tests to detect accidental changes
-to the sequence.
+to the sequence. For `(0x12345678, 0x9abcdef0, 0, 0, lane=0)`, the pinned
+`u32` output is `0x409066f8`.
 
 ## Scientific-quality warning
 
