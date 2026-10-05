@@ -26,6 +26,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install software Vulkan runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
+
       - name: Build pinned wgpu-native
         shell: bash
         run: |
@@ -51,6 +56,12 @@ jobs:
 
       - name: Run CPU regression in WebGPU build
         run: ctest --test-dir build-wgpu -R g4wgpu.cpu_backend --output-on-failure
+
+      - name: Run WebGPU smoke test on software Vulkan
+        env:
+          LD_LIBRARY_PATH: /tmp/wgpu-native/target/release
+          WGPU_BACKEND: vulkan
+        run: ctest --test-dir build-wgpu -R g4wgpu.webgpu_backend --output-on-failure
 
 
   geant4-compile-link:
