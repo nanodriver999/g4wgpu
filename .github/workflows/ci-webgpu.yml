@@ -51,3 +51,44 @@ jobs:
 
       - name: Run CPU regression in WebGPU build
         run: ctest --test-dir build-wgpu -R g4wgpu.cpu_backend --output-on-failure
+
+
+  geant4-compile-link:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Geant4 build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libexpat1-dev
+
+      - name: Build pinned Geant4 fork
+        shell: bash
+        run: |
+          git clone https://github.com/nanodriver999/geant4.git /tmp/geant4
+          cd /tmp/geant4
+          git checkout f3d5293d384757b8a228a099898b2b87cfa4023c
+
+          cmake -S /tmp/geant4 -B /tmp/geant4-build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_PREFIX=/tmp/geant4-install \
+            -DGEANT4_INSTALL_DATA=OFF \
+            -DGEANT4_BUILD_MULTITHREADED=ON
+
+          cmake --build /tmp/geant4-build -j2
+          cmake --install /tmp/geant4-build
+
+      - name: Configure g4wgpu with Geant4
+        shell: bash
+        run: |
+          cmake -S . -B build-g4 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DG4WGPU_ENABLE_GEANT4=ON \
+            -DGeant4_DIR=/tmp/geant4-install/lib/cmake/Geant4
+
+      - name: Compile and link Geant4 adapter
+        run: cmake --build build-g4 -j2
+
+      - name: Run non-Geant4 regression tests
+        run: ctest --test-dir build-g4 --output-on-failure
