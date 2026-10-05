@@ -26,6 +26,8 @@ void TrackBatch::resize(const std::size_t count) {
 
   particle_id.resize(count);
   material_id.resize(count);
+  rng_stream_lo.resize(count);
+  rng_stream_hi.resize(count);
   rng_counter_lo.resize(count);
   rng_counter_hi.resize(count);
   status.resize(count);
@@ -34,11 +36,12 @@ void TrackBatch::resize(const std::size_t count) {
 void TrackBatch::validate() const {
   const auto expected = size();
 
-  const std::array<std::size_t, 11> sizes = {
-      position_y.size(),      position_z.size(),      direction_x.size(),
-      direction_y.size(),     direction_z.size(),     kinetic_energy.size(),
-      particle_id.size(),     material_id.size(),     rng_counter_lo.size(),
-      rng_counter_hi.size(),  status.size(),
+  const std::array<std::size_t, 13> sizes = {
+      position_y.size(),       position_z.size(),       direction_x.size(),
+      direction_y.size(),      direction_z.size(),      kinetic_energy.size(),
+      particle_id.size(),      material_id.size(),      rng_stream_lo.size(),
+      rng_stream_hi.size(),    rng_counter_lo.size(),   rng_counter_hi.size(),
+      status.size(),
   };
 
   for (const auto actual : sizes) {
