@@ -78,7 +78,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /tmp/geant4-install
-          key: geant4-${{ runner.os }}-f3d5293d384757b8a228a099898b2b87cfa4023c
+          key: geant4-data-v1-${{ runner.os }}-f3d5293d384757b8a228a099898b2b87cfa4023c
 
       - name: Install Geant4 build prerequisites
         if: steps.geant4-cache.outputs.cache-hit != 'true'
@@ -97,7 +97,7 @@ jobs:
           cmake -S /tmp/geant4 -B /tmp/geant4-build \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=/tmp/geant4-install \
-            -DGEANT4_INSTALL_DATA=OFF \
+            -DGEANT4_INSTALL_DATA=ON \
             -DGEANT4_BUILD_MULTITHREADED=ON
 
           cmake --build /tmp/geant4-build -j2
@@ -108,7 +108,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: /tmp/geant4-install
-          key: geant4-${{ runner.os }}-f3d5293d384757b8a228a099898b2b87cfa4023c
+          key: geant4-data-v1-${{ runner.os }}-f3d5293d384757b8a228a099898b2b87cfa4023c
 
       - name: Configure g4wgpu with Geant4
         shell: bash
@@ -122,6 +122,8 @@ jobs:
         run: cmake --build build-g4 -j2
 
       - name: Run Geant4 and core integration tests
-        env:
-          LD_LIBRARY_PATH: /tmp/geant4-install/lib
-        run: ctest --test-dir build-g4 --output-on-failure --no-tests=error
+        shell: bash
+        run: |
+          source /tmp/geant4-install/bin/geant4.sh
+          export LD_LIBRARY_PATH=/tmp/geant4-install/lib:${LD_LIBRARY_PATH:-}
+          ctest --test-dir build-g4 --output-on-failure --no-tests=error
