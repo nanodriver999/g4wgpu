@@ -8,8 +8,8 @@ std::string_view CpuBackend::name() const noexcept {
   return "cpu";
 }
 
-void CpuBackend::axpy(const float a, const std::vector<float>& x,
-                      std::vector<float>& y) {
+void CpuBackend::axpy(const double a, const std::vector<double>& x,
+                      std::vector<double>& y) {
   if (x.size() != y.size()) {
     throw std::invalid_argument("axpy requires x and y to have equal lengths");
   }
