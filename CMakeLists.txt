@@ -101,6 +101,7 @@ if(G4WGPU_ENABLE_GEANT4)
 
     add_library(g4wgpu_geant4
         src/geant4/G4WgpuTrackingManager.cc
+        src/geant4/TrackBatchConversion.cc
     )
     add_library(g4wgpu::geant4 ALIAS g4wgpu_geant4)
 
@@ -125,6 +126,22 @@ if(G4WGPU_ENABLE_GEANT4)
         PUBLIC
             G4WGPU_HAS_GEANT4=1
     )
+
+    if(G4WGPU_BUILD_TESTING)
+        add_executable(g4wgpu_geant4_track_batch_test
+            tests/integration/test_geant4_track_batch.cc
+        )
+        target_link_libraries(g4wgpu_geant4_track_batch_test
+            PRIVATE
+                g4wgpu::geant4
+                ${Geant4_LIBRARIES}
+        )
+
+        add_test(
+            NAME g4wgpu.geant4_track_batch
+            COMMAND g4wgpu_geant4_track_batch_test
+        )
+    endif()
 endif()
 
 if(G4WGPU_BUILD_TESTING)
