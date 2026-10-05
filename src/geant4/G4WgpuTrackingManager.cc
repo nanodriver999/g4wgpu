@@ -101,7 +101,7 @@ bool G4WgpuTrackingManager::is_gpu_candidate(
   }
 
   return policy_.should_buffer_gamma(
-      track.GetKineticEnergy() / MeV);
+      track.GetKineticEnergy() / CLHEP::MeV);
 }
 
 void G4WgpuTrackingManager::HandOverOneTrack(
