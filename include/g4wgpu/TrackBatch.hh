@@ -18,7 +18,7 @@ struct TrackBatch {
 
   std::vector<double> kinetic_energy;
 
-  std::vector<std::uint32_t> particle_id;
+  std::vector<std::int32_t> particle_id;
   std::vector<std::uint32_t> material_id;
 
   // Stable per-track RNG stream identity. This is separate from the
