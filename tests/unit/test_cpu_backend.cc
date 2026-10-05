@@ -8,8 +8,8 @@
 
 namespace {
 
-void require_close(const float actual, const float expected,
-                   const float tolerance = 1.0e-6f) {
+void require_close(const double actual, const double expected,
+                   const double tolerance = 1.0e-12) {
   if (std::fabs(actual - expected) > tolerance) {
     std::cerr << "expected " << expected << ", got " << actual << '\n';
     std::exit(EXIT_FAILURE);
@@ -26,37 +26,37 @@ int main() {
   }
 
   {
-    const std::vector<double> x{1.0f, 2.0f, 3.0f};
-    std::vector<double> y{4.0f, 5.0f, 6.0f};
+    const std::vector<double> x{1.0, 2.0, 3.0};
+    std::vector<double> y{4.0, 5.0, 6.0};
 
-    backend.axpy(2.0f, x, y);
+    backend.axpy(2.0, x, y);
 
-    require_close(y[0], 6.0f);
-    require_close(y[1], 9.0f);
-    require_close(y[2], 12.0f);
+    require_close(y[0], 6.0);
+    require_close(y[1], 9.0);
+    require_close(y[2], 12.0);
   }
 
   {
     g4wgpu::TrackBatch tracks;
     tracks.resize(2);
 
-    tracks.position_x = {1.0f, -1.0f};
-    tracks.position_y = {2.0f, -2.0f};
-    tracks.position_z = {3.0f, -3.0f};
+    tracks.position_x = {1.0, -1.0};
+    tracks.position_y = {2.0, -2.0};
+    tracks.position_z = {3.0, -3.0};
 
-    tracks.direction_x = {0.5f, 1.0f};
-    tracks.direction_y = {1.0f, 0.0f};
-    tracks.direction_z = {-1.0f, 2.0f};
+    tracks.direction_x = {0.5, 1.0};
+    tracks.direction_y = {1.0, 0.0};
+    tracks.direction_z = {-1.0, 2.0};
 
-    backend.advance_positions(tracks, 2.0f);
+    backend.advance_positions(tracks, 2.0);
 
-    require_close(tracks.position_x[0], 2.0f);
-    require_close(tracks.position_y[0], 4.0f);
-    require_close(tracks.position_z[0], 1.0f);
+    require_close(tracks.position_x[0], 2.0);
+    require_close(tracks.position_y[0], 4.0);
+    require_close(tracks.position_z[0], 1.0);
 
-    require_close(tracks.position_x[1], 1.0f);
-    require_close(tracks.position_y[1], -2.0f);
-    require_close(tracks.position_z[1], 1.0f);
+    require_close(tracks.position_x[1], 1.0);
+    require_close(tracks.position_y[1], -2.0);
+    require_close(tracks.position_z[1], 1.0);
   }
 
   {
@@ -66,7 +66,7 @@ int main() {
 
     bool threw = false;
     try {
-      backend.advance_positions(malformed, 1.0f);
+      backend.advance_positions(malformed, 1.0);
     } catch (const std::invalid_argument&) {
       threw = true;
     }
