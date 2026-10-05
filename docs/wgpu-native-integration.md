@@ -53,14 +53,19 @@ To enable the backend, point CMake at a wgpu-native installation:
 ```bash
 cmake -S . -B build-wgpu \
   -DG4WGPU_ENABLE_WEBGPU=ON \
-  -DG4WGPU_WGPU_NATIVE_INCLUDE_DIR=/path/to/wgpu-native/include \
+  -DG4WGPU_WGPU_NATIVE_INCLUDE_DIR=/path/to/wgpu-native/ffi \
+  -DG4WGPU_WEBGPU_HEADER_DIR=/path/to/wgpu-native/ffi/webgpu-headers \
   -DG4WGPU_WGPU_NATIVE_LIBRARY=/path/to/libwgpu_native.so
 ```
 
-The include directory must contain both:
+The two header paths are explicit because the upstream wgpu-native source
+tree keeps them separately:
 
-- `webgpu.h`
-- `wgpu.h`
+- `G4WGPU_WGPU_NATIVE_INCLUDE_DIR`: contains `wgpu.h`
+- `G4WGPU_WEBGPU_HEADER_DIR`: contains the matching `webgpu.h`
+
+A packaged installation may place them together; in that case both CMake
+variables may point to the same directory.
 
 The integration test is opt-in because CI machines may not have a usable GPU:
 
