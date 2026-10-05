@@ -7,17 +7,15 @@
 #include "G4Event.hh"
 #include "G4EventManager.hh"
 #include "G4Gamma.hh"
-#include "G4Material.hh"
 #include "G4ParticleDefinition.hh"
 #include "G4ProcessManager.hh"
-#include "G4SystemOfUnits.hh"
 #include "G4StackManager.hh"
 #include "G4Track.hh"
 #include "G4TrackStatus.hh"
 #include "G4TrackingManager.hh"
 #include "G4VProcess.hh"
 
-#include "g4wgpu/TrackStatus.hh"
+#include "g4wgpu/geant4/TrackBatchConversion.hh"
 
 namespace g4wgpu {
 namespace {
@@ -131,9 +129,6 @@ void G4WgpuTrackingManager::FlushEvent() {
 
 TrackBatch G4WgpuTrackingManager::make_batch(
     const std::vector<G4Track*>& tracks) const {
-  TrackBatch batch;
-  batch.resize(tracks.size());
-
   auto* event_manager = G4EventManager::GetEventManager();
   const auto* event =
       event_manager != nullptr
@@ -142,49 +137,8 @@ TrackBatch G4WgpuTrackingManager::make_batch(
   const std::uint32_t event_id =
       event != nullptr ? to_u32(event->GetEventID()) : 0u;
 
-  for (std::size_t i = 0; i < tracks.size(); ++i) {
-    const auto* track = tracks[i];
-    const auto& position = track->GetPosition();
-    const auto& direction = track->GetMomentumDirection();
-
-    batch.position_x[i] = position.x() / mm;
-    batch.position_y[i] = position.y() / mm;
-    batch.position_z[i] = position.z() / mm;
-
-    batch.direction_x[i] = direction.x();
-    batch.direction_y[i] = direction.y();
-    batch.direction_z[i] = direction.z();
-
-    batch.kinetic_energy[i] =
-        track->GetKineticEnergy() / MeV;
-
-    const auto* definition =
-        track->GetParticleDefinition();
-    batch.particle_id[i] =
-        definition != nullptr
-            ? to_u32(definition->GetPDGEncoding())
-            : 0u;
-
-    const auto* material = track->GetMaterial();
-    batch.material_id[i] =
-        material != nullptr
-            ? static_cast<std::uint32_t>(
-                  material->GetIndex())
-            : 0u;
-
-    // Event ID + Geant4 track ID form the initial stable stream identity.
-    // A future multi-run/global identity layer may extend this mapping.
-    batch.rng_stream_lo[i] =
-        to_u32(track->GetTrackID());
-    batch.rng_stream_hi[i] = event_id;
-    batch.rng_counter_lo[i] = 0u;
-    batch.rng_counter_hi[i] = 0u;
-    batch.status[i] =
-        static_cast<std::uint32_t>(
-            TrackStatus::Active);
-  }
-
-  return batch;
+  return make_track_batch_from_geant4(
+      tracks, event_id);
 }
 
 void G4WgpuTrackingManager::flush_buffer() {
