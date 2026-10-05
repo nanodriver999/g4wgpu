@@ -59,15 +59,20 @@ The run ID is not yet part of the RNG stream identity. This is sufficient for
 within-event development but must be extended before cross-run reproducibility
 is claimed.
 
-## Current fallback limitation
+## Current fallback behavior
 
-The deferred fallback currently accepts terminal statuses:
+The CPU fallback mirrors Geant4 event-stack handling for:
 
+- `fStopButAlive`
+- `fSuspend`
+- `fSuspendAndWait`
+- `fPostponeToNextEvent`
 - `fStopAndKill`
 - `fKillTrackAndSecondaries`
 
-Other terminal/suspended statuses are rejected until their ownership semantics
-are explicitly implemented and tested.
+Trajectory storage is currently rejected explicitly because the custom tracking
+manager does not have access to `G4EventManager`'s private trajectory
+container. This avoids silently losing user-requested trajectory data.
 
 ## Build
 
