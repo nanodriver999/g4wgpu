@@ -111,7 +111,7 @@ if(G4WGPU_ENABLE_GEANT4)
         PUBLIC
             $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
             $<INSTALL_INTERFACE:include>
-        PRIVATE
+        PUBLIC
             ${Geant4_INCLUDE_DIRS}
     )
 
