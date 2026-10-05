@@ -1,59 +1,56 @@
-# Luna Chat Coder
+# g4wgpu
 
-[한국어 README](README.ko.md)
+Geant4의 기존 C++ 애플리케이션 구조를 유지하면서 계산 집약적인 physics/geometry kernel을
+WebGPU compute로 단계적으로 가속하는 연구 프로젝트입니다.
 
-**Version 0.1.5**
+기본 native WebGPU runtime은 **wgpu-native**를 목표로 하며,
+상위 C++ 계층은 가능한 한 표준 **webgpu.h** API에 맞춰 runtime 종속성을 격리합니다.
 
-Use ordinary ChatGPT Web conversations for real GitHub repository work—without running a local coding agent, opening a tunnel, or giving the chat access to your computer.
+## 현재 상태
 
-ChatGPT already has a sandbox that can run code. The catch is that network restrictions can stop repository work when the chat needs source, dependencies, or a reliable way to publish a larger change. Luna teaches the model to keep the development loop in that built-in sandbox and use connected GitHub access only for the missing pieces.
+현재 단계는 Geant4 11.5.0.beta 소스 구조 분석과 구현 계획 수립입니다.
 
-## What you get
+기준 Geant4:
+`nanodriver999/geant4@f3d5293d384757b8a228a099898b2b87cfa4023c`
 
-- **A useful built-in workspace.** Editing, building, testing, and debugging stay in the chat sandbox whenever it can do the job.
-- **Fewer dead ends.** If the normal path cannot complete a step reliably, Luna can use GitHub for that step instead of giving up or moving the whole workflow elsewhere.
-- **Safer recovery.** If the chat or sandbox disappears, Luna resumes from exact GitHub state rather than trying to recreate code from conversation history.
-- **Reliable handoff.** After substantial work on repository files, Luna can give you a complete sandbox workspace snapshot when the chat supports direct file downloads, while still checking the state it publishes before reporting completion.
-
-The point is simple: give the chat a repository and a development task, not a new piece of infrastructure to operate.
-
-## Quick start
-
-For the ChatGPT Web setup documented here:
-
-1. Choose **Use this template → Create a new repository**.
-2. In ChatGPT, install/connect the **GitHub Plugin** from <https://chatgpt.com/plugins>.
-3. On GitHub, install the **ChatGPT Codex Connector** from <https://github.com/apps/chatgpt-codex-connector> and grant it access to the new repository. If the App is already installed for selected repositories, add the new repository to that list.
-4. In a normal ChatGPT conversation, send the repository URL and the development task—for example, ask it to implement a change and open a pull request.
-
-That is the normal workflow. A repository created from this template already contains Luna, and you should not need to mention Luna by name or manage its internal recovery steps yourself.
-
-Organization policy may require an administrator to approve the Plugin or GitHub App.
-
-## How it works
-
-Luna reads the repository's own instructions and requirements, recovers the exact source it should work from, and uses the chat sandbox for the normal edit/test loop.
-
-When direct sandbox access is not enough, Luna can use the connected GitHub path for the missing step. If that path still cannot complete the step reliably, a bounded GitHub Actions run can handle it, then return the work to the sandbox when possible. GitHub Actions is not the default coding environment.
-
-## Add Luna to an existing repository
-
-Copy the complete skill directory:
+핵심 전략:
 
 ```text
-.agents/skills/luna-chat-coder/
+Geant4 C++
+   ↓
+G4VTrackingManager
+   ↓
+batched Track SoA
+   ↓
+ComputeBackend
+   ├─ CPU reference
+   └─ WebGPU
+        ↓
+     wgpu-native
+        ↓
+ Vulkan / Metal / D3D12
 ```
 
-Then merge the short Luna entry-point instruction from [`AGENTS.md`](AGENTS.md) into the repository's existing agent instructions. Keep the project's own engineering guidance; Luna works around it rather than replacing it.
+전체 Geant4를 재작성하지 않습니다. GPU에 적합한 kernel만 선택적으로 이동하고 CPU fallback을 유지합니다.
 
-For the documented ChatGPT Web path, connect the GitHub Plugin and grant the ChatGPT Codex Connector access to the repository before asking the chat to work on it.
+## 문서
 
-## Documentation
+- [Geant4 GPU 전환 분석](docs/geant4-gpu-analysis.md)
+- [단계별 구현 계획](docs/implementation-plan.md)
 
-Runtime behavior lives in [`SKILL.md`](.agents/skills/luna-chat-coder/SKILL.md). Operational details are in [`actions-missions.md`](.agents/skills/luna-chat-coder/references/actions-missions.md) and [`recovery.md`](.agents/skills/luna-chat-coder/references/recovery.md). [`design-rationale.md`](.agents/skills/luna-chat-coder/references/design-rationale.md) is maintainer memory for changing Luna itself; normal skill use does not depend on it.
+## 개발 원칙
 
-Luna follows the Agent Skills structure. ChatGPT Web is the path documented and tested here; another host can use the same skill when it provides equivalent sandbox and GitHub capabilities.
+- 기존 C++ Geant4 application을 유지합니다.
+- Geant4 core를 직접 fork-modify하는 것보다 public extension point를 우선합니다.
+- `G4VTrackingManager::HandOverOneTrack/FlushEvent`를 batching 경계로 활용합니다.
+- GPU buffer에는 `G4Track` object 자체가 아니라 POD/SoA 데이터만 전달합니다.
+- CPU reference backend를 항상 유지합니다.
+- 정확도와 Monte Carlo 통계 검증을 성능보다 먼저 통과시킵니다.
+- WebGPU portable path와 native-only extension을 구분합니다.
 
 ## License
 
-MIT. See [`LICENSE`](LICENSE).
+이 저장소의 자체 작성 코드는 MIT 라이선스를 기본으로 합니다.
+
+Geant4는 별도의 Geant4 Software License를 사용합니다.
+Geant4 소스에서 직접 파생되는 코드가 추가될 경우 해당 라이선스 의무를 파일 단위로 검토합니다.
