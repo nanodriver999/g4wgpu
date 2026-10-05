@@ -24,15 +24,15 @@ int main() {
   auto* dynamic_particle = new G4DynamicParticle(
       G4Gamma::GammaDefinition(),
       G4ThreeVector(0.0, 0.6, 0.8),
-      2.5 * MeV);
+      2.5 * CLHEP::MeV);
 
   auto* track = new G4Track(
       dynamic_particle,
       0.0,
       G4ThreeVector(
-          1.25 * mm,
-          -2.5 * mm,
-          4.0 * mm));
+          1.25 * CLHEP::mm,
+          -2.5 * CLHEP::mm,
+          4.0 * CLHEP::mm));
   track->SetTrackID(42);
 
   std::vector<G4Track*> tracks{track};
