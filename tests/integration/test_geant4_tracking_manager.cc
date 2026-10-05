@@ -29,7 +29,7 @@ class DetectorConstruction final : public G4VUserDetectorConstruction {
         G4NistManager::Instance()->FindOrBuildMaterial("G4_Galactic");
 
     auto* solid =
-        new G4Box("World", 1.0 * m, 1.0 * m, 1.0 * m);
+        new G4Box("World", 1.0 * CLHEP::m, 1.0 * CLHEP::m, 1.0 * CLHEP::m);
     auto* logical =
         new G4LogicalVolume(solid, vacuum, "World");
 
@@ -60,7 +60,7 @@ class PrimaryGenerator final : public G4VUserPrimaryGeneratorAction {
  public:
   PrimaryGenerator() : gun_(1) {
     gun_.SetParticleDefinition(G4Gamma::GammaDefinition());
-    gun_.SetParticleEnergy(1.0 * MeV);
+    gun_.SetParticleEnergy(1.0 * CLHEP::MeV);
     gun_.SetParticlePosition(G4ThreeVector());
     gun_.SetParticleMomentumDirection(
         G4ThreeVector(0.0, 0.0, 1.0));
