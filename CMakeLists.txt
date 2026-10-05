@@ -4,6 +4,12 @@ project(g4wgpu VERSION 0.1.0 LANGUAGES CXX)
 
 option(G4WGPU_BUILD_TESTING "Build g4wgpu tests" ON)
 option(G4WGPU_ENABLE_WEBGPU "Enable the WebGPU backend" OFF)
+option(G4WGPU_RUN_GPU_TESTS "Run tests that require a usable GPU/WebGPU adapter" OFF)
+
+set(G4WGPU_WGPU_NATIVE_INCLUDE_DIR "" CACHE PATH
+    "Directory containing wgpu-native webgpu.h and wgpu.h")
+set(G4WGPU_WGPU_NATIVE_LIBRARY "" CACHE FILEPATH
+    "Path to the wgpu-native library")
 
 add_library(g4wgpu_core
     src/core/TrackBatch.cc
@@ -21,9 +27,53 @@ target_include_directories(g4wgpu_core
 )
 
 if(G4WGPU_ENABLE_WEBGPU)
-    message(FATAL_ERROR
-        "G4WGPU_ENABLE_WEBGPU is reserved for PR 3. "
-        "The current core intentionally has no GPU dependency.")
+    if(NOT G4WGPU_WGPU_NATIVE_INCLUDE_DIR)
+        find_path(G4WGPU_WGPU_NATIVE_INCLUDE_DIR
+            NAMES wgpu.h
+            PATH_SUFFIXES include ffi
+        )
+    endif()
+
+    if(NOT G4WGPU_WGPU_NATIVE_LIBRARY)
+        find_library(G4WGPU_WGPU_NATIVE_LIBRARY
+            NAMES wgpu_native wgpu-native
+        )
+    endif()
+
+    if(NOT G4WGPU_WGPU_NATIVE_INCLUDE_DIR
+       OR NOT EXISTS "${G4WGPU_WGPU_NATIVE_INCLUDE_DIR}/wgpu.h"
+       OR NOT EXISTS "${G4WGPU_WGPU_NATIVE_INCLUDE_DIR}/webgpu.h")
+        message(FATAL_ERROR
+            "G4WGPU_ENABLE_WEBGPU=ON requires an include directory "
+            "containing both wgpu.h and webgpu.h. Set "
+            "G4WGPU_WGPU_NATIVE_INCLUDE_DIR explicitly.")
+    endif()
+
+    if(NOT G4WGPU_WGPU_NATIVE_LIBRARY)
+        message(FATAL_ERROR
+            "G4WGPU_ENABLE_WEBGPU=ON requires wgpu-native. Set "
+            "G4WGPU_WGPU_NATIVE_LIBRARY to the native library path.")
+    endif()
+
+    target_sources(g4wgpu_core
+        PRIVATE
+            src/webgpu/WebGpuBackend.cc
+    )
+
+    target_include_directories(g4wgpu_core
+        PRIVATE
+            "${G4WGPU_WGPU_NATIVE_INCLUDE_DIR}"
+    )
+
+    target_link_libraries(g4wgpu_core
+        PRIVATE
+            "${G4WGPU_WGPU_NATIVE_LIBRARY}"
+    )
+
+    target_compile_definitions(g4wgpu_core
+        PUBLIC
+            G4WGPU_HAS_WEBGPU=1
+    )
 endif()
 
 if(G4WGPU_BUILD_TESTING)
@@ -38,4 +88,16 @@ if(G4WGPU_BUILD_TESTING)
         NAME g4wgpu.cpu_backend
         COMMAND g4wgpu_cpu_backend_test
     )
+
+    if(G4WGPU_ENABLE_WEBGPU AND G4WGPU_RUN_GPU_TESTS)
+        add_executable(g4wgpu_webgpu_backend_test
+            tests/integration/test_webgpu_backend.cc
+        )
+        target_link_libraries(g4wgpu_webgpu_backend_test PRIVATE g4wgpu::core)
+
+        add_test(
+            NAME g4wgpu.webgpu_backend
+            COMMAND g4wgpu_webgpu_backend_test
+        )
+    endif()
 endif()
