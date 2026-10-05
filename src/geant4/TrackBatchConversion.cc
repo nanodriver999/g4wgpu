@@ -51,8 +51,9 @@ TrackBatch make_track_batch_from_geant4(
         track->GetParticleDefinition();
     batch.particle_id[i] =
         definition != nullptr
-            ? to_u32(definition->GetPDGEncoding())
-            : 0u;
+            ? static_cast<std::int32_t>(
+                  definition->GetPDGEncoding())
+            : 0;
 
     const auto* material = track->GetMaterial();
     batch.material_id[i] =
