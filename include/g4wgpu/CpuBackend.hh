@@ -11,7 +11,7 @@ class CpuBackend final : public ComputeBackend {
   void axpy(float a, const std::vector<float>& x,
             std::vector<float>& y) override;
 
-  void advance_positions(TrackBatch& tracks, float dt) override;
+  void advance_positions(TrackBatch& tracks, double dt) override;
 };
 
 }  // namespace g4wgpu
