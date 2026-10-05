@@ -49,7 +49,7 @@ For each buffered track:
 - position → mm
 - direction → dimensionless unit vector
 - kinetic energy → MeV
-- particle ID → PDG encoding
+- particle ID → signed 32-bit PDG encoding (preserves antiparticle negatives)
 - material ID → Geant4 material-table index
 - RNG stream low → Geant4 track ID
 - RNG stream high → Geant4 event ID
