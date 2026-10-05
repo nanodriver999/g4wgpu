@@ -141,6 +141,20 @@ if(G4WGPU_ENABLE_GEANT4)
             NAME g4wgpu.geant4_track_batch
             COMMAND g4wgpu_geant4_track_batch_test
         )
+
+        add_executable(g4wgpu_geant4_tracking_manager_test
+            tests/integration/test_geant4_tracking_manager.cc
+        )
+        target_link_libraries(g4wgpu_geant4_tracking_manager_test
+            PRIVATE
+                g4wgpu::geant4
+                ${Geant4_LIBRARIES}
+        )
+
+        add_test(
+            NAME g4wgpu.geant4_tracking_manager
+            COMMAND g4wgpu_geant4_tracking_manager_test
+        )
     endif()
 endif()
 
