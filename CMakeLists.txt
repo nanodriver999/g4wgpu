@@ -17,6 +17,7 @@ add_library(g4wgpu_core
     src/core/TrackBatch.cc
     src/core/CounterRng.cc
     src/core/BatchOps.cc
+    src/physics/KleinNishina.cc
     src/cpu/CpuBackend.cc
 )
 
@@ -114,6 +115,16 @@ if(G4WGPU_BUILD_TESTING)
     add_test(
         NAME g4wgpu.counter_rng
         COMMAND g4wgpu_counter_rng_test
+    )
+
+    add_executable(g4wgpu_klein_nishina_test
+        tests/numerical/test_klein_nishina.cc
+    )
+    target_link_libraries(g4wgpu_klein_nishina_test PRIVATE g4wgpu::core)
+
+    add_test(
+        NAME g4wgpu.klein_nishina
+        COMMAND g4wgpu_klein_nishina_test
     )
 
     if(G4WGPU_ENABLE_WEBGPU AND G4WGPU_RUN_GPU_TESTS)
