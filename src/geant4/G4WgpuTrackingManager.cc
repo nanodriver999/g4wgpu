@@ -11,6 +11,7 @@
 #include "G4ParticleDefinition.hh"
 #include "G4ProcessManager.hh"
 #include "G4SystemOfUnits.hh"
+#include "G4StackManager.hh"
 #include "G4Track.hh"
 #include "G4TrackStatus.hh"
 #include "G4TrackingManager.hh"
@@ -226,12 +227,40 @@ void G4WgpuTrackingManager::process_with_default_tracking(
         "default G4TrackingManager is not available");
   }
 
+  // G4EventManager normally takes ownership of trajectories created by the
+  // default tracking manager. A custom G4VTrackingManager does not have
+  // access to the event manager's private trajectory container, so silently
+  // dropping a requested trajectory would be incorrect.
+  if (tracking_manager->GetStoreTrajectory() != 0) {
+    throw std::runtime_error(
+        "G4WgpuTrackingManager CPU fallback does not yet support "
+        "Geant4 trajectory storage");
+  }
+
   tracking_manager->ProcessOneTrack(track);
 
   auto* secondaries =
       tracking_manager->GimmeSecondaries();
+  auto* stack_manager =
+      event_manager->GetStackManager();
+  if (stack_manager == nullptr) {
+    throw std::runtime_error(
+        "G4StackManager is not available");
+  }
 
   switch (track->GetTrackStatus()) {
+    case fStopButAlive:
+    case fSuspend:
+    case fSuspendAndWait:
+      stack_manager->PushOneTrack(track);
+      event_manager->StackTracks(secondaries);
+      return;
+
+    case fPostponeToNextEvent:
+      stack_manager->PushOneTrack(track);
+      event_manager->StackTracks(secondaries);
+      return;
+
     case fStopAndKill:
       event_manager->StackTracks(secondaries);
       delete track;
@@ -247,11 +276,13 @@ void G4WgpuTrackingManager::process_with_default_tracking(
       delete track;
       return;
 
-    default:
+    case fAlive:
       throw std::runtime_error(
-          "default G4TrackingManager returned a track status "
-          "that the deferred fallback path does not yet support");
+          "default G4TrackingManager returned fAlive unexpectedly");
   }
+
+  throw std::runtime_error(
+      "default G4TrackingManager returned an unknown track status");
 }
 
 }  // namespace g4wgpu
