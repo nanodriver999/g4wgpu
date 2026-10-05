@@ -19,7 +19,7 @@ void CpuBackend::axpy(const float a, const std::vector<float>& x,
   }
 }
 
-void CpuBackend::advance_positions(TrackBatch& tracks, const float dt) {
+void CpuBackend::advance_positions(TrackBatch& tracks, const double dt) {
   tracks.validate();
 
   for (std::size_t i = 0; i < tracks.size(); ++i) {
