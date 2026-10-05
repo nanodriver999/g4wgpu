@@ -20,7 +20,7 @@ class ComputeBackend {
 
   // Representative track-batch operation used to establish the data
   // boundary that future WebGPU kernels will consume.
-  virtual void advance_positions(TrackBatch& tracks, float dt) = 0;
+  virtual void advance_positions(TrackBatch& tracks, double dt) = 0;
 };
 
 }  // namespace g4wgpu
