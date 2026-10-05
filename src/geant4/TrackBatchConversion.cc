@@ -55,7 +55,12 @@ TrackBatch make_track_batch_from_geant4(
                   definition->GetPDGEncoding())
             : 0;
 
-    const auto* material = track->GetMaterial();
+    // G4Track::GetMaterial() dereferences the current G4Step. Tracks handed
+    // over before default tracking begins may not have a step yet.
+    const auto* material =
+        track->GetStep() != nullptr
+            ? track->GetMaterial()
+            : nullptr;
     batch.material_id[i] =
         material != nullptr
             ? static_cast<std::uint32_t>(
