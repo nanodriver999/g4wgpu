@@ -6,7 +6,6 @@
 
 #include "G4Box.hh"
 #include "G4DynamicParticle.hh"
-#include "G4EmStandardPhysics.hh"
 #include "G4Event.hh"
 #include "G4Gamma.hh"
 #include "G4LogicalVolume.hh"
@@ -16,7 +15,7 @@
 #include "G4RunManager.hh"
 #include "G4SystemOfUnits.hh"
 #include "G4ThreeVector.hh"
-#include "G4VModularPhysicsList.hh"
+#include "G4VUserPhysicsList.hh"
 #include "G4VUserDetectorConstruction.hh"
 #include "G4VUserPrimaryGeneratorAction.hh"
 
@@ -45,10 +44,14 @@ class DetectorConstruction final : public G4VUserDetectorConstruction {
   }
 };
 
-class EmPhysicsList final : public G4VModularPhysicsList {
- public:
-  EmPhysicsList() {
-    RegisterPhysics(new G4EmStandardPhysics());
+class MinimalPhysicsList final : public G4VUserPhysicsList {
+ protected:
+  void ConstructParticle() override {
+    G4Gamma::GammaDefinition();
+  }
+
+  void ConstructProcess() override {
+    AddTransportation();
   }
 
   void SetCuts() override {
@@ -87,7 +90,7 @@ int main() {
   run_manager->SetUserInitialization(
       new DetectorConstruction());
   run_manager->SetUserInitialization(
-      new EmPhysicsList());
+      new MinimalPhysicsList());
   run_manager->SetUserAction(
       new PrimaryGenerator());
 
