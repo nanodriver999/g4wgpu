@@ -1,7 +1,6 @@
 #include "g4wgpu/WebGpuBackend.hh"
 
 #include <algorithm>
-#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <cstring>
@@ -94,7 +93,7 @@ void on_device_request(WGPURequestDeviceStatus status, WGPUDevice device,
 }
 
 struct BufferMapState {
-  std::atomic<bool> done{false};
+  bool done = false;
   bool success = false;
   std::string error;
 };
@@ -109,7 +108,7 @@ void on_buffer_map(WGPUMapAsyncStatus status, WGPUStringView message,
     state->error = copy_message(message);
   }
 
-  state->done.store(true, std::memory_order_release);
+  state->done = true;
 }
 
 WGPUShaderModule create_shader_module(WGPUDevice device, const char* source) {
@@ -452,7 +451,7 @@ class WebGpuBackend::Impl {
     BufferMapState map_state;
     WGPUBufferMapCallbackInfo map_callback =
         WGPU_BUFFER_MAP_CALLBACK_INFO_INIT;
-    map_callback.mode = WGPUCallbackMode_AllowSpontaneous;
+    map_callback.mode = WGPUCallbackMode_AllowProcessEvents;
     map_callback.callback = on_buffer_map;
     map_callback.userdata1 = &map_state;
 
@@ -460,9 +459,9 @@ class WebGpuBackend::Impl {
         resources.readback_buffer, WGPUMapMode_Read, 0, bytes,
         map_callback);
     wgpuDevicePoll(device, WGPU_TRUE, nullptr);
+    wait_for_callback(instance, map_state, "wgpuBufferMapAsync");
 
-    if (!map_state.done.load(std::memory_order_acquire) ||
-        !map_state.success) {
+    if (!map_state.success) {
       throw std::runtime_error(
           "WebGPU buffer mapping failed: " + map_state.error);
     }
