@@ -15,8 +15,8 @@ class ComputeBackend {
 
   // Small backend-independent smoke kernel. It exists to validate the
   // backend/runtime path before any Geant4 physics is introduced.
-  virtual void axpy(float a, const std::vector<float>& x,
-                    std::vector<float>& y) = 0;
+  virtual void axpy(double a, const std::vector<double>& x,
+                    std::vector<double>& y) = 0;
 
   // Representative track-batch operation used to establish the data
   // boundary that future WebGPU kernels will consume.
