@@ -8,15 +8,15 @@
 namespace g4wgpu {
 
 struct TrackBatch {
-  std::vector<float> position_x;
-  std::vector<float> position_y;
-  std::vector<float> position_z;
+  std::vector<double> position_x;
+  std::vector<double> position_y;
+  std::vector<double> position_z;
 
-  std::vector<float> direction_x;
-  std::vector<float> direction_y;
-  std::vector<float> direction_z;
+  std::vector<double> direction_x;
+  std::vector<double> direction_y;
+  std::vector<double> direction_z;
 
-  std::vector<float> kinetic_energy;
+  std::vector<double> kinetic_energy;
 
   std::vector<std::uint32_t> particle_id;
   std::vector<std::uint32_t> material_id;
