@@ -118,7 +118,6 @@ if(G4WGPU_ENABLE_GEANT4)
     target_link_libraries(g4wgpu_geant4
         PUBLIC
             g4wgpu::core
-        PRIVATE
             ${Geant4_LIBRARIES}
     )
 
