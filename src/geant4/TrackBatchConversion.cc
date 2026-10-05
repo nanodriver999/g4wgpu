@@ -36,16 +36,16 @@ TrackBatch make_track_batch_from_geant4(
     const auto& position = track->GetPosition();
     const auto& direction = track->GetMomentumDirection();
 
-    batch.position_x[i] = position.x() / mm;
-    batch.position_y[i] = position.y() / mm;
-    batch.position_z[i] = position.z() / mm;
+    batch.position_x[i] = position.x() / CLHEP::mm;
+    batch.position_y[i] = position.y() / CLHEP::mm;
+    batch.position_z[i] = position.z() / CLHEP::mm;
 
     batch.direction_x[i] = direction.x();
     batch.direction_y[i] = direction.y();
     batch.direction_z[i] = direction.z();
 
     batch.kinetic_energy[i] =
-        track->GetKineticEnergy() / MeV;
+        track->GetKineticEnergy() / CLHEP::MeV;
 
     const auto* definition =
         track->GetParticleDefinition();
