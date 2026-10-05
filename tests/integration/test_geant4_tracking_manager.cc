@@ -91,17 +91,18 @@ int main() {
   run_manager->SetUserAction(
       new PrimaryGenerator());
 
-  run_manager->Initialize();
-
   g4wgpu::TrackingPolicy policy;
   policy.batch_capacity = 8;
   policy.min_gamma_energy_mev = 0.0;
 
   g4wgpu::G4WgpuTrackingManager tracking_manager(policy);
 
+  // Register before Geant4 initialization so PreparePhysicsTable() and
+  // BuildPhysicsTable() are exercised through the custom manager too.
   G4Gamma::GammaDefinition()->SetTrackingManager(
       &tracking_manager);
 
+  run_manager->Initialize();
   run_manager->BeamOn(1);
 
   G4Gamma::GammaDefinition()->SetTrackingManager(nullptr);
