@@ -121,5 +121,5 @@ jobs:
       - name: Compile and link Geant4 adapter
         run: cmake --build build-g4 -j2
 
-      - name: Run non-Geant4 regression tests
-        run: ctest --test-dir build-g4 --output-on-failure
+      - name: Run Geant4 and core integration tests
+        run: ctest --test-dir build-g4 --output-on-failure --no-tests=error
