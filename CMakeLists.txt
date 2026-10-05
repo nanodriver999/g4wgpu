@@ -4,6 +4,7 @@ project(g4wgpu VERSION 0.1.0 LANGUAGES CXX)
 
 option(G4WGPU_BUILD_TESTING "Build g4wgpu tests" ON)
 option(G4WGPU_ENABLE_WEBGPU "Enable the WebGPU backend" OFF)
+option(G4WGPU_ENABLE_GEANT4 "Enable the Geant4 integration layer" OFF)
 option(G4WGPU_RUN_GPU_TESTS "Run tests that require a usable GPU/WebGPU adapter" OFF)
 
 set(G4WGPU_WGPU_NATIVE_INCLUDE_DIR "" CACHE PATH
@@ -17,6 +18,7 @@ add_library(g4wgpu_core
     src/core/TrackBatch.cc
     src/core/CounterRng.cc
     src/core/BatchOps.cc
+    src/core/TrackingPolicy.cc
     src/physics/KleinNishina.cc
     src/cpu/CpuBackend.cc
 )
@@ -96,7 +98,69 @@ endif()
 
 if(G4WGPU_BUILD_TESTING)
     enable_testing()
+endif()
 
+if(G4WGPU_ENABLE_GEANT4)
+    find_package(Geant4 REQUIRED)
+
+    add_library(g4wgpu_geant4
+        src/geant4/G4WgpuTrackingManager.cc
+        src/geant4/TrackBatchConversion.cc
+    )
+    add_library(g4wgpu::geant4 ALIAS g4wgpu_geant4)
+
+    target_compile_features(g4wgpu_geant4 PUBLIC cxx_std_17)
+
+    target_include_directories(g4wgpu_geant4
+        PUBLIC
+            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+            $<INSTALL_INTERFACE:include>
+            ${Geant4_INCLUDE_DIRS}
+    )
+
+    target_link_libraries(g4wgpu_geant4
+        PUBLIC
+            g4wgpu::core
+            ${Geant4_LIBRARIES}
+    )
+
+    target_compile_definitions(g4wgpu_geant4
+        PUBLIC
+            G4WGPU_HAS_GEANT4=1
+    )
+
+    if(G4WGPU_BUILD_TESTING)
+        add_executable(g4wgpu_geant4_track_batch_test
+            tests/integration/test_geant4_track_batch.cc
+        )
+        target_link_libraries(g4wgpu_geant4_track_batch_test
+            PRIVATE
+                g4wgpu::geant4
+                ${Geant4_LIBRARIES}
+        )
+
+        add_test(
+            NAME g4wgpu.geant4_track_batch
+            COMMAND g4wgpu_geant4_track_batch_test
+        )
+
+        add_executable(g4wgpu_geant4_tracking_manager_test
+            tests/integration/test_geant4_tracking_manager.cc
+        )
+        target_link_libraries(g4wgpu_geant4_tracking_manager_test
+            PRIVATE
+                g4wgpu::geant4
+                ${Geant4_LIBRARIES}
+        )
+
+        add_test(
+            NAME g4wgpu.geant4_tracking_manager
+            COMMAND g4wgpu_geant4_tracking_manager_test
+        )
+    endif()
+endif()
+
+if(G4WGPU_BUILD_TESTING)
     add_executable(g4wgpu_cpu_backend_test
         tests/unit/test_cpu_backend.cc
     )
@@ -125,6 +189,16 @@ if(G4WGPU_BUILD_TESTING)
     add_test(
         NAME g4wgpu.klein_nishina
         COMMAND g4wgpu_klein_nishina_test
+    )
+
+    add_executable(g4wgpu_tracking_policy_test
+        tests/unit/test_tracking_policy.cc
+    )
+    target_link_libraries(g4wgpu_tracking_policy_test PRIVATE g4wgpu::core)
+
+    add_test(
+        NAME g4wgpu.tracking_policy
+        COMMAND g4wgpu_tracking_policy_test
     )
 
     if(G4WGPU_ENABLE_WEBGPU AND G4WGPU_RUN_GPU_TESTS)
