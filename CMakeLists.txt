@@ -96,6 +96,10 @@ if(G4WGPU_ENABLE_WEBGPU)
     )
 endif()
 
+if(G4WGPU_BUILD_TESTING)
+    enable_testing()
+endif()
+
 if(G4WGPU_ENABLE_GEANT4)
     find_package(Geant4 REQUIRED)
 
@@ -158,8 +162,6 @@ if(G4WGPU_ENABLE_GEANT4)
 endif()
 
 if(G4WGPU_BUILD_TESTING)
-    enable_testing()
-
     add_executable(g4wgpu_cpu_backend_test
         tests/unit/test_cpu_backend.cc
     )
