@@ -26,8 +26,8 @@ int main() {
   }
 
   {
-    const std::vector<float> x{1.0f, 2.0f, 3.0f};
-    std::vector<float> y{4.0f, 5.0f, 6.0f};
+    const std::vector<double> x{1.0f, 2.0f, 3.0f};
+    std::vector<double> y{4.0f, 5.0f, 6.0f};
 
     backend.axpy(2.0f, x, y);
 
