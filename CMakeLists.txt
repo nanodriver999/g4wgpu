@@ -7,7 +7,9 @@ option(G4WGPU_ENABLE_WEBGPU "Enable the WebGPU backend" OFF)
 option(G4WGPU_RUN_GPU_TESTS "Run tests that require a usable GPU/WebGPU adapter" OFF)
 
 set(G4WGPU_WGPU_NATIVE_INCLUDE_DIR "" CACHE PATH
-    "Directory containing wgpu-native webgpu.h and wgpu.h")
+    "Directory containing wgpu-native wgpu.h")
+set(G4WGPU_WEBGPU_HEADER_DIR "" CACHE PATH
+    "Directory containing the webgpu.h version used by wgpu-native")
 set(G4WGPU_WGPU_NATIVE_LIBRARY "" CACHE FILEPATH
     "Path to the wgpu-native library")
 
@@ -34,6 +36,13 @@ if(G4WGPU_ENABLE_WEBGPU)
         )
     endif()
 
+    if(NOT G4WGPU_WEBGPU_HEADER_DIR)
+        find_path(G4WGPU_WEBGPU_HEADER_DIR
+            NAMES webgpu.h
+            PATH_SUFFIXES include ffi/webgpu-headers webgpu-headers
+        )
+    endif()
+
     if(NOT G4WGPU_WGPU_NATIVE_LIBRARY)
         find_library(G4WGPU_WGPU_NATIVE_LIBRARY
             NAMES wgpu_native wgpu-native
@@ -41,12 +50,17 @@ if(G4WGPU_ENABLE_WEBGPU)
     endif()
 
     if(NOT G4WGPU_WGPU_NATIVE_INCLUDE_DIR
-       OR NOT EXISTS "${G4WGPU_WGPU_NATIVE_INCLUDE_DIR}/wgpu.h"
-       OR NOT EXISTS "${G4WGPU_WGPU_NATIVE_INCLUDE_DIR}/webgpu.h")
+       OR NOT EXISTS "${G4WGPU_WGPU_NATIVE_INCLUDE_DIR}/wgpu.h")
         message(FATAL_ERROR
-            "G4WGPU_ENABLE_WEBGPU=ON requires an include directory "
-            "containing both wgpu.h and webgpu.h. Set "
-            "G4WGPU_WGPU_NATIVE_INCLUDE_DIR explicitly.")
+            "G4WGPU_ENABLE_WEBGPU=ON requires the directory containing "
+            "wgpu-native's wgpu.h. Set G4WGPU_WGPU_NATIVE_INCLUDE_DIR.")
+    endif()
+
+    if(NOT G4WGPU_WEBGPU_HEADER_DIR
+       OR NOT EXISTS "${G4WGPU_WEBGPU_HEADER_DIR}/webgpu.h")
+        message(FATAL_ERROR
+            "G4WGPU_ENABLE_WEBGPU=ON requires the webgpu.h version used "
+            "by wgpu-native. Set G4WGPU_WEBGPU_HEADER_DIR.")
     endif()
 
     if(NOT G4WGPU_WGPU_NATIVE_LIBRARY)
@@ -63,6 +77,7 @@ if(G4WGPU_ENABLE_WEBGPU)
     target_include_directories(g4wgpu_core
         PRIVATE
             "${G4WGPU_WGPU_NATIVE_INCLUDE_DIR}"
+            "${G4WGPU_WEBGPU_HEADER_DIR}"
     )
 
     target_link_libraries(g4wgpu_core
