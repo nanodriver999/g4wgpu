@@ -1,6 +1,7 @@
 #include "g4wgpu/geant4/G4WgpuTrackingManager.hh"
 
 #include <cstdint>
+#include <exception>
 #include <stdexcept>
 
 #include "G4Event.hh"
