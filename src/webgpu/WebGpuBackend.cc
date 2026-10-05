@@ -1,10 +1,12 @@
 #include "g4wgpu/WebGpuBackend.hh"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -30,6 +32,24 @@ std::string copy_message(const WGPUStringView message) {
   }
 
   return std::string(message.data, message.length);
+}
+
+template <typename State>
+void wait_for_callback(WGPUInstance instance, const State& state,
+                       const char* operation) {
+  const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(10);
+
+  while (!state.done) {
+    wgpuInstanceProcessEvents(instance);
+
+    if (std::chrono::steady_clock::now() >= deadline) {
+      throw std::runtime_error(
+          std::string(operation) + " timed out waiting for WebGPU callback");
+    }
+
+    std::this_thread::yield();
+  }
 }
 
 struct AdapterRequestState {
@@ -96,8 +116,7 @@ WGPUShaderModule create_shader_module(WGPUDevice device, const char* source) {
 
   WGPUShaderModuleDescriptor descriptor = WGPU_SHADER_MODULE_DESCRIPTOR_INIT;
   descriptor.label = string_view("g4wgpu_axpy_shader");
-  descriptor.nextInChain =
-      reinterpret_cast<WGPUChainedStruct*>(&wgsl);
+  descriptor.nextInChain = reinterpret_cast<WGPUChainedStruct*>(&wgsl);
 
   return wgpuDeviceCreateShaderModule(device, &descriptor);
 }
@@ -150,11 +169,62 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
 }
 )WGSL";
 
+struct DispatchResources {
+  WGPUBuffer x_buffer = nullptr;
+  WGPUBuffer y_buffer = nullptr;
+  WGPUBuffer params_buffer = nullptr;
+  WGPUBuffer readback_buffer = nullptr;
+  WGPUBindGroupLayout layout = nullptr;
+  WGPUBindGroup bind_group = nullptr;
+  WGPUCommandEncoder encoder = nullptr;
+  WGPUCommandBuffer command_buffer = nullptr;
+
+  ~DispatchResources() {
+    if (command_buffer != nullptr) {
+      wgpuCommandBufferRelease(command_buffer);
+    }
+    if (encoder != nullptr) {
+      wgpuCommandEncoderRelease(encoder);
+    }
+    if (bind_group != nullptr) {
+      wgpuBindGroupRelease(bind_group);
+    }
+    if (layout != nullptr) {
+      wgpuBindGroupLayoutRelease(layout);
+    }
+    if (readback_buffer != nullptr) {
+      wgpuBufferRelease(readback_buffer);
+    }
+    if (params_buffer != nullptr) {
+      wgpuBufferRelease(params_buffer);
+    }
+    if (y_buffer != nullptr) {
+      wgpuBufferRelease(y_buffer);
+    }
+    if (x_buffer != nullptr) {
+      wgpuBufferRelease(x_buffer);
+    }
+  }
+};
+
 }  // namespace
 
 class WebGpuBackend::Impl {
  public:
   Impl() {
+    try {
+      initialize();
+    } catch (...) {
+      release();
+      throw;
+    }
+  }
+
+  ~Impl() {
+    release();
+  }
+
+  void initialize() {
     instance = wgpuCreateInstance(nullptr);
     if (instance == nullptr) {
       throw std::runtime_error("wgpuCreateInstance failed");
@@ -168,9 +238,7 @@ class WebGpuBackend::Impl {
     adapter_callback.userdata1 = &adapter_state;
 
     wgpuInstanceRequestAdapter(instance, nullptr, adapter_callback);
-    while (!adapter_state.done) {
-      wgpuInstanceProcessEvents(instance);
-    }
+    wait_for_callback(instance, adapter_state, "wgpuInstanceRequestAdapter");
 
     if (adapter_state.adapter == nullptr) {
       throw std::runtime_error(
@@ -186,9 +254,7 @@ class WebGpuBackend::Impl {
     device_callback.userdata1 = &device_state;
 
     wgpuAdapterRequestDevice(adapter, nullptr, device_callback);
-    while (!device_state.done) {
-      wgpuInstanceProcessEvents(instance);
-    }
+    wait_for_callback(instance, device_state, "wgpuAdapterRequestDevice");
 
     if (device_state.device == nullptr) {
       throw std::runtime_error(
@@ -222,24 +288,30 @@ class WebGpuBackend::Impl {
     }
   }
 
-  ~Impl() {
+  void release() noexcept {
     if (pipeline != nullptr) {
       wgpuComputePipelineRelease(pipeline);
+      pipeline = nullptr;
     }
     if (shader != nullptr) {
       wgpuShaderModuleRelease(shader);
+      shader = nullptr;
     }
     if (queue != nullptr) {
       wgpuQueueRelease(queue);
+      queue = nullptr;
     }
     if (device != nullptr) {
       wgpuDeviceRelease(device);
+      device = nullptr;
     }
     if (adapter != nullptr) {
       wgpuAdapterRelease(adapter);
+      adapter = nullptr;
     }
     if (instance != nullptr) {
       wgpuInstanceRelease(instance);
+      instance = nullptr;
     }
   }
 
@@ -260,36 +332,30 @@ class WebGpuBackend::Impl {
     const std::uint64_t bytes =
         static_cast<std::uint64_t>(x.size() * sizeof(float));
 
-    WGPUBuffer x_buffer = create_buffer(
+    DispatchResources resources;
+    resources.x_buffer = create_buffer(
         device, "g4wgpu_axpy_x", bytes,
         WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
-    WGPUBuffer y_buffer = create_buffer(
+    resources.y_buffer = create_buffer(
         device, "g4wgpu_axpy_y", bytes,
         WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst |
             WGPUBufferUsage_CopySrc);
-    WGPUBuffer params_buffer = create_buffer(
+    resources.params_buffer = create_buffer(
         device, "g4wgpu_axpy_params", sizeof(AxpyParams),
         WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst);
-    WGPUBuffer readback_buffer = create_buffer(
+    resources.readback_buffer = create_buffer(
         device, "g4wgpu_axpy_readback", bytes,
         WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
 
-    if (x_buffer == nullptr || y_buffer == nullptr ||
-        params_buffer == nullptr || readback_buffer == nullptr) {
-      if (x_buffer != nullptr) wgpuBufferRelease(x_buffer);
-      if (y_buffer != nullptr) wgpuBufferRelease(y_buffer);
-      if (params_buffer != nullptr) wgpuBufferRelease(params_buffer);
-      if (readback_buffer != nullptr) wgpuBufferRelease(readback_buffer);
+    if (resources.x_buffer == nullptr || resources.y_buffer == nullptr ||
+        resources.params_buffer == nullptr ||
+        resources.readback_buffer == nullptr) {
       throw std::runtime_error("failed to create WebGPU buffers");
     }
 
-    WGPUBindGroupLayout layout =
+    resources.layout =
         wgpuComputePipelineGetBindGroupLayout(pipeline, 0);
-    if (layout == nullptr) {
-      wgpuBufferRelease(readback_buffer);
-      wgpuBufferRelease(params_buffer);
-      wgpuBufferRelease(y_buffer);
-      wgpuBufferRelease(x_buffer);
+    if (resources.layout == nullptr) {
       throw std::runtime_error(
           "wgpuComputePipelineGetBindGroupLayout failed");
     }
@@ -301,49 +367,53 @@ class WebGpuBackend::Impl {
     };
 
     entries[0].binding = 0;
-    entries[0].buffer = x_buffer;
+    entries[0].buffer = resources.x_buffer;
     entries[0].size = bytes;
 
     entries[1].binding = 1;
-    entries[1].buffer = y_buffer;
+    entries[1].buffer = resources.y_buffer;
     entries[1].size = bytes;
 
     entries[2].binding = 2;
-    entries[2].buffer = params_buffer;
+    entries[2].buffer = resources.params_buffer;
     entries[2].size = sizeof(AxpyParams);
 
     WGPUBindGroupDescriptor bind_group_descriptor =
         WGPU_BIND_GROUP_DESCRIPTOR_INIT;
     bind_group_descriptor.label = string_view("g4wgpu_axpy_bind_group");
-    bind_group_descriptor.layout = layout;
+    bind_group_descriptor.layout = resources.layout;
     bind_group_descriptor.entryCount = 3;
     bind_group_descriptor.entries = entries;
 
-    WGPUBindGroup bind_group =
+    resources.bind_group =
         wgpuDeviceCreateBindGroup(device, &bind_group_descriptor);
-    if (bind_group == nullptr) {
-      wgpuBindGroupLayoutRelease(layout);
-      wgpuBufferRelease(readback_buffer);
-      wgpuBufferRelease(params_buffer);
-      wgpuBufferRelease(y_buffer);
-      wgpuBufferRelease(x_buffer);
+    if (resources.bind_group == nullptr) {
       throw std::runtime_error("wgpuDeviceCreateBindGroup failed");
     }
 
     WGPUCommandEncoderDescriptor encoder_descriptor =
         WGPU_COMMAND_ENCODER_DESCRIPTOR_INIT;
     encoder_descriptor.label = string_view("g4wgpu_axpy_encoder");
-    WGPUCommandEncoder encoder =
+    resources.encoder =
         wgpuDeviceCreateCommandEncoder(device, &encoder_descriptor);
+    if (resources.encoder == nullptr) {
+      throw std::runtime_error("wgpuDeviceCreateCommandEncoder failed");
+    }
 
     WGPUComputePassDescriptor pass_descriptor =
         WGPU_COMPUTE_PASS_DESCRIPTOR_INIT;
     pass_descriptor.label = string_view("g4wgpu_axpy_pass");
     WGPUComputePassEncoder pass =
-        wgpuCommandEncoderBeginComputePass(encoder, &pass_descriptor);
+        wgpuCommandEncoderBeginComputePass(
+            resources.encoder, &pass_descriptor);
+    if (pass == nullptr) {
+      throw std::runtime_error(
+          "wgpuCommandEncoderBeginComputePass failed");
+    }
 
     wgpuComputePassEncoderSetPipeline(pass, pipeline);
-    wgpuComputePassEncoderSetBindGroup(pass, 0, bind_group, 0, nullptr);
+    wgpuComputePassEncoderSetBindGroup(
+        pass, 0, resources.bind_group, 0, nullptr);
 
     const std::uint32_t workgroups =
         (static_cast<std::uint32_t>(x.size()) + 255u) / 256u;
@@ -352,23 +422,30 @@ class WebGpuBackend::Impl {
     wgpuComputePassEncoderRelease(pass);
 
     wgpuCommandEncoderCopyBufferToBuffer(
-        encoder, y_buffer, 0, readback_buffer, 0, bytes);
+        resources.encoder, resources.y_buffer, 0,
+        resources.readback_buffer, 0, bytes);
 
     WGPUCommandBufferDescriptor command_buffer_descriptor =
         WGPU_COMMAND_BUFFER_DESCRIPTOR_INIT;
     command_buffer_descriptor.label =
         string_view("g4wgpu_axpy_command_buffer");
-    WGPUCommandBuffer command_buffer =
-        wgpuCommandEncoderFinish(encoder, &command_buffer_descriptor);
+    resources.command_buffer =
+        wgpuCommandEncoderFinish(
+            resources.encoder, &command_buffer_descriptor);
+    if (resources.command_buffer == nullptr) {
+      throw std::runtime_error("wgpuCommandEncoderFinish failed");
+    }
 
     const AxpyParams params{
         a, static_cast<std::uint32_t>(x.size()), 0u, 0u};
 
-    wgpuQueueWriteBuffer(queue, x_buffer, 0, x.data(), bytes);
-    wgpuQueueWriteBuffer(queue, y_buffer, 0, y.data(), bytes);
     wgpuQueueWriteBuffer(
-        queue, params_buffer, 0, &params, sizeof(params));
-    wgpuQueueSubmit(queue, 1, &command_buffer);
+        queue, resources.x_buffer, 0, x.data(), bytes);
+    wgpuQueueWriteBuffer(
+        queue, resources.y_buffer, 0, y.data(), bytes);
+    wgpuQueueWriteBuffer(
+        queue, resources.params_buffer, 0, &params, sizeof(params));
+    wgpuQueueSubmit(queue, 1, &resources.command_buffer);
 
     BufferMapState map_state;
     WGPUBufferMapCallbackInfo map_callback =
@@ -378,40 +455,27 @@ class WebGpuBackend::Impl {
     map_callback.userdata1 = &map_state;
 
     wgpuBufferMapAsync(
-        readback_buffer, WGPUMapMode_Read, 0, bytes, map_callback);
+        resources.readback_buffer, WGPUMapMode_Read, 0, bytes,
+        map_callback);
     wgpuDevicePoll(device, WGPU_TRUE, nullptr);
 
     if (!map_state.done || !map_state.success) {
-      wgpuCommandBufferRelease(command_buffer);
-      wgpuCommandEncoderRelease(encoder);
-      wgpuBindGroupRelease(bind_group);
-      wgpuBindGroupLayoutRelease(layout);
-      wgpuBufferRelease(readback_buffer);
-      wgpuBufferRelease(params_buffer);
-      wgpuBufferRelease(y_buffer);
-      wgpuBufferRelease(x_buffer);
       throw std::runtime_error(
           "WebGPU buffer mapping failed: " + map_state.error);
     }
 
     const void* mapped =
-        wgpuBufferGetConstMappedRange(readback_buffer, 0, bytes);
+        wgpuBufferGetConstMappedRange(
+            resources.readback_buffer, 0, bytes);
     if (mapped == nullptr) {
+      wgpuBufferUnmap(resources.readback_buffer);
       throw std::runtime_error(
           "wgpuBufferGetConstMappedRange returned null");
     }
 
-    std::memcpy(y.data(), mapped, static_cast<std::size_t>(bytes));
-    wgpuBufferUnmap(readback_buffer);
-
-    wgpuCommandBufferRelease(command_buffer);
-    wgpuCommandEncoderRelease(encoder);
-    wgpuBindGroupRelease(bind_group);
-    wgpuBindGroupLayoutRelease(layout);
-    wgpuBufferRelease(readback_buffer);
-    wgpuBufferRelease(params_buffer);
-    wgpuBufferRelease(y_buffer);
-    wgpuBufferRelease(x_buffer);
+    std::memcpy(
+        y.data(), mapped, static_cast<std::size_t>(bytes));
+    wgpuBufferUnmap(resources.readback_buffer);
   }
 
   WGPUInstance instance = nullptr;
