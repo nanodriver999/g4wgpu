@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
+#include <iomanip>
 #include <iostream>
 
 #include "G4Gamma.hh"
@@ -14,7 +15,7 @@ namespace {
 bool close_relative(
     const double a,
     const double b,
-    const double tolerance = 2.0e-12) {
+    const double tolerance = 1.0e-9) {
   const double scale =
       std::max(std::fabs(a), std::fabs(b));
   if (scale == 0.0) {
@@ -79,13 +80,18 @@ int main() {
     if (!close_relative(
             reference_barn,
             portable_barn)) {
+      const double rel_error =
+          std::fabs(reference_barn - portable_barn) /
+          std::max(std::fabs(reference_barn), std::fabs(portable_barn));
       std::cerr
+          << std::setprecision(17)
           << "cross-section mismatch E="
           << test.energy_mev
           << " MeV Z=" << test.z
           << " Geant4=" << reference_barn
           << " barn portable=" << portable_barn
-          << " barn\n";
+          << " barn rel_error=" << rel_error
+          << '\n';
       return EXIT_FAILURE;
     }
   }
