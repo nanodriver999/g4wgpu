@@ -120,7 +120,6 @@ jobs:
             | tar -xz -C /tmp/geant4-data
           curl -fsSL https://cern.ch/geant4-data/datasets/G4PhotonEvaporation.6.1.2.tar.gz \
             | tar -xz -C /tmp/geant4-data
-
           test -d /tmp/geant4-data/G4ENSDFSTATE3.0
           test -d /tmp/geant4-data/G4EMLOW9.0
           test -d /tmp/geant4-data/PhotonEvaporation6.1.2
@@ -175,7 +174,6 @@ jobs:
             | tar -xz -C /tmp/geant4-data
           curl -fsSL https://cern.ch/geant4-data/datasets/G4PhotonEvaporation.6.1.2.tar.gz \
             | tar -xz -C /tmp/geant4-data
-
           test -d /tmp/geant4-data/G4ENSDFSTATE3.0
           test -d /tmp/geant4-data/G4EMLOW9.0
           test -d /tmp/geant4-data/PhotonEvaporation6.1.2
@@ -212,5 +210,4 @@ jobs:
           G4ENSDFSTATEDATA: /tmp/geant4-data/G4ENSDFSTATE3.0
           G4LEDATA: /tmp/geant4-data/G4EMLOW9.0
           G4LEVELGAMMADATA: /tmp/geant4-data/PhotonEvaporation6.1.2
-        run: ctest --test-dir build-shadow -R '^g4wgpu\.geant4_webgpu_shadow
- --output-on-failure --no-tests=error
+        run: ctest --test-dir build-shadow -R g4wgpu.geant4_webgpu_shadow --output-on-failure --no-tests=error
