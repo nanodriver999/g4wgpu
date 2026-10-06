@@ -65,7 +65,7 @@ jobs:
         env:
           LD_LIBRARY_PATH: /tmp/wgpu-native/target/release
           WGPU_BACKEND: vulkan
-        run: ctest --test-dir build-wgpu -R g4wgpu.webgpu_backend --output-on-failure
+        run: ctest --test-dir build-wgpu -R '^g4wgpu\.webgpu_' --output-on-failure --no-tests=error
 
 
   geant4-compile-link:
