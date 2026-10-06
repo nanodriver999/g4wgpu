@@ -1,5 +1,6 @@
 #include "g4wgpu/ComptonCrossSection.hh"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
