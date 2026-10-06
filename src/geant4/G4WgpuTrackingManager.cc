@@ -67,8 +67,10 @@ std::uint32_t to_u32(const G4int value) noexcept {
 }  // namespace
 
 G4WgpuTrackingManager::G4WgpuTrackingManager(
-    TrackingPolicy policy)
-    : policy_(policy) {
+    TrackingPolicy policy,
+    PhysicsBackend* shadow_physics_backend)
+    : policy_(policy),
+      shadow_physics_backend_(shadow_physics_backend) {
   policy_.validate();
   buffered_tracks_.reserve(policy_.batch_capacity);
 }
@@ -151,6 +153,7 @@ TrackBatch G4WgpuTrackingManager::make_batch(
 void G4WgpuTrackingManager::flush_buffer() {
   if (buffered_tracks_.empty()) {
     last_flushed_batch_.resize(0);
+    last_shadow_samples_.clear();
     last_flushed_batch_size_ = 0;
     return;
   }
@@ -160,7 +163,32 @@ void G4WgpuTrackingManager::flush_buffer() {
   last_flushed_batch_size_ =
       last_flushed_batch_.size();
 
-  // PR #6 validates the Geant4 batching/lifecycle boundary first.
+  last_shadow_samples_.clear();
+  if (shadow_physics_backend_ != nullptr) {
+    std::vector<RngAddress> rng(last_flushed_batch_.size());
+
+    for (std::size_t i = 0; i < last_flushed_batch_.size(); ++i) {
+      rng[i] = RngAddress{
+          last_flushed_batch_.rng_stream_lo[i],
+          last_flushed_batch_.rng_stream_hi[i],
+          last_flushed_batch_.rng_counter_lo[i],
+          last_flushed_batch_.rng_counter_hi[i]};
+    }
+
+    last_shadow_samples_ =
+        shadow_physics_backend_->sample_klein_nishina_batch(
+            last_flushed_batch_.kinetic_energy,
+            rng);
+
+    if (last_shadow_samples_.size() != last_flushed_batch_.size()) {
+      throw std::runtime_error(
+          "shadow physics backend returned an unexpected sample count");
+    }
+  }
+
+  // Shadow physics is observational only. Geant4 state is still determined
+  // exclusively by the existing CPU tracking path until a later PR promotes
+  // GPU results into transport state changes.
   // Actual WebGPU physics ownership is introduced only after this fallback
   // path is proven equivalent.
   auto tracks = std::move(buffered_tracks_);

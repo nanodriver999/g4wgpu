@@ -158,6 +158,22 @@ if(G4WGPU_ENABLE_GEANT4)
             NAME g4wgpu.geant4_tracking_manager
             COMMAND g4wgpu_geant4_tracking_manager_test
         )
+
+        if(G4WGPU_ENABLE_WEBGPU AND G4WGPU_RUN_GPU_TESTS)
+            add_executable(g4wgpu_geant4_webgpu_shadow_test
+                tests/integration/test_geant4_webgpu_shadow.cc
+            )
+            target_link_libraries(g4wgpu_geant4_webgpu_shadow_test
+                PRIVATE
+                    g4wgpu::geant4
+                    ${Geant4_LIBRARIES}
+            )
+
+            add_test(
+                NAME g4wgpu.geant4_webgpu_shadow
+                COMMAND g4wgpu_geant4_webgpu_shadow_test
+            )
+        endif()
     endif()
 endif()
 

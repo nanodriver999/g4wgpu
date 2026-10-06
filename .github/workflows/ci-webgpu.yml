@@ -110,13 +110,19 @@ jobs:
           path: /tmp/geant4-install
           key: geant4-${{ runner.os }}-f3d5293d384757b8a228a099898b2b87cfa4023c
 
-      - name: Install minimal Geant4 runtime dataset
+      - name: Install Geant4 runtime datasets
         shell: bash
         run: |
           mkdir -p /tmp/geant4-data
           curl -fsSL https://cern.ch/geant4-data/datasets/G4ENSDFSTATE.3.0.tar.gz \
             | tar -xz -C /tmp/geant4-data
+          curl -fsSL https://cern.ch/geant4-data/datasets/G4EMLOW.9.0.tar.gz \
+            | tar -xz -C /tmp/geant4-data
+          curl -fsSL https://cern.ch/geant4-data/datasets/G4PhotonEvaporation.6.1.2.tar.gz \
+            | tar -xz -C /tmp/geant4-data
           test -d /tmp/geant4-data/G4ENSDFSTATE3.0
+          test -d /tmp/geant4-data/G4EMLOW9.0
+          test -d /tmp/geant4-data/PhotonEvaporation6.1.2
 
       - name: Configure g4wgpu with Geant4
         shell: bash
@@ -133,4 +139,75 @@ jobs:
         env:
           LD_LIBRARY_PATH: /tmp/geant4-install/lib
           G4ENSDFSTATEDATA: /tmp/geant4-data/G4ENSDFSTATE3.0
+          G4LEDATA: /tmp/geant4-data/G4EMLOW9.0
+          G4LEVELGAMMADATA: /tmp/geant4-data/PhotonEvaporation6.1.2
         run: ctest --test-dir build-g4 --output-on-failure --no-tests=error
+
+
+  geant4-webgpu-shadow:
+    needs:
+      - webgpu-compile-link
+      - geant4-compile-link
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Restore pinned Geant4 install
+        uses: actions/cache@v4
+        with:
+          path: /tmp/geant4-install
+          key: geant4-${{ runner.os }}-f3d5293d384757b8a228a099898b2b87cfa4023c
+          fail-on-cache-miss: true
+
+      - name: Install combined runtime prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libexpat1-dev mesa-vulkan-drivers
+
+      - name: Install Geant4 runtime datasets
+        shell: bash
+        run: |
+          mkdir -p /tmp/geant4-data
+          curl -fsSL https://cern.ch/geant4-data/datasets/G4ENSDFSTATE.3.0.tar.gz \
+            | tar -xz -C /tmp/geant4-data
+          curl -fsSL https://cern.ch/geant4-data/datasets/G4EMLOW.9.0.tar.gz \
+            | tar -xz -C /tmp/geant4-data
+          curl -fsSL https://cern.ch/geant4-data/datasets/G4PhotonEvaporation.6.1.2.tar.gz \
+            | tar -xz -C /tmp/geant4-data
+          test -d /tmp/geant4-data/G4ENSDFSTATE3.0
+          test -d /tmp/geant4-data/G4EMLOW9.0
+          test -d /tmp/geant4-data/PhotonEvaporation6.1.2
+
+      - name: Build pinned wgpu-native
+        shell: bash
+        run: |
+          git clone https://github.com/gfx-rs/wgpu-native.git /tmp/wgpu-native
+          cd /tmp/wgpu-native
+          git checkout 250eeb67f8d091bf7dbc4fc253293d10900cff64
+          git submodule update --init --recursive
+          make lib-native-release
+
+      - name: Configure combined Geant4 and WebGPU build
+        shell: bash
+        run: |
+          cmake -S . -B build-shadow \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DG4WGPU_ENABLE_GEANT4=ON \
+            -DG4WGPU_ENABLE_WEBGPU=ON \
+            -DG4WGPU_RUN_GPU_TESTS=ON \
+            -DGeant4_DIR=/tmp/geant4-install/lib/cmake/Geant4 \
+            -DG4WGPU_WGPU_NATIVE_INCLUDE_DIR=/tmp/wgpu-native/ffi \
+            -DG4WGPU_WEBGPU_HEADER_DIR=/tmp/wgpu-native/ffi/webgpu-headers \
+            -DG4WGPU_WGPU_NATIVE_LIBRARY=/tmp/wgpu-native/target/release/libwgpu_native.so
+
+      - name: Build combined integration target
+        run: cmake --build build-shadow -j2
+
+      - name: Run Geant4 to WebGPU shadow integration
+        env:
+          LD_LIBRARY_PATH: /tmp/geant4-install/lib:/tmp/wgpu-native/target/release
+          WGPU_BACKEND: vulkan
+          G4ENSDFSTATEDATA: /tmp/geant4-data/G4ENSDFSTATE3.0
+          G4LEDATA: /tmp/geant4-data/G4EMLOW9.0
+          G4LEVELGAMMADATA: /tmp/geant4-data/PhotonEvaporation6.1.2
+        run: ctest --test-dir build-shadow -R g4wgpu.geant4_webgpu_shadow --output-on-failure --no-tests=error
