@@ -77,6 +77,7 @@ if(G4WGPU_ENABLE_WEBGPU)
     target_sources(g4wgpu_core
         PRIVATE
             src/webgpu/WebGpuBackend.cc
+            src/webgpu/WebGpuKleinNishina.cc
     )
 
     target_include_directories(g4wgpu_core
@@ -210,6 +211,17 @@ if(G4WGPU_BUILD_TESTING)
         add_test(
             NAME g4wgpu.webgpu_backend
             COMMAND g4wgpu_webgpu_backend_test
+        )
+
+        add_executable(g4wgpu_webgpu_klein_nishina_test
+            tests/integration/test_webgpu_klein_nishina.cc
+        )
+        target_link_libraries(g4wgpu_webgpu_klein_nishina_test
+            PRIVATE g4wgpu::core)
+
+        add_test(
+            NAME g4wgpu.webgpu_klein_nishina
+            COMMAND g4wgpu_webgpu_klein_nishina_test
         )
     endif()
 endif()

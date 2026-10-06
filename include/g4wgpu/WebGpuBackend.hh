@@ -4,10 +4,11 @@
 #include <string_view>
 
 #include "g4wgpu/ComputeBackend.hh"
+#include "g4wgpu/PhysicsBackend.hh"
 
 namespace g4wgpu {
 
-class WebGpuBackend final : public ComputeBackend {
+class WebGpuBackend final : public ComputeBackend, public PhysicsBackend {
  public:
   WebGpuBackend();
   ~WebGpuBackend() override;
@@ -23,6 +24,11 @@ class WebGpuBackend final : public ComputeBackend {
             std::vector<double>& y) override;
 
   void advance_positions(TrackBatch& tracks, double dt) override;
+
+  std::vector<KleinNishinaSample> sample_klein_nishina_batch(
+      const std::vector<double>& incident_gamma_energy_mev,
+      std::vector<RngAddress>& rng,
+      std::uint32_t max_iterations = 1000u) override;
 
  private:
   class Impl;
