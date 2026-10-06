@@ -110,13 +110,20 @@ jobs:
           path: /tmp/geant4-install
           key: geant4-${{ runner.os }}-f3d5293d384757b8a228a099898b2b87cfa4023c
 
-      - name: Install minimal Geant4 runtime dataset
+      - name: Install Geant4 runtime datasets
         shell: bash
         run: |
           mkdir -p /tmp/geant4-data
           curl -fsSL https://cern.ch/geant4-data/datasets/G4ENSDFSTATE.3.0.tar.gz \
             | tar -xz -C /tmp/geant4-data
+          curl -fsSL https://cern.ch/geant4-data/datasets/G4EMLOW.9.0.tar.gz \
+            | tar -xz -C /tmp/geant4-data
+          curl -fsSL https://cern.ch/geant4-data/datasets/G4PhotonEvaporation.6.1.2.tar.gz \
+            | tar -xz -C /tmp/geant4-data
+
           test -d /tmp/geant4-data/G4ENSDFSTATE3.0
+          test -d /tmp/geant4-data/G4EMLOW9.0
+          test -d /tmp/geant4-data/PhotonEvaporation6.1.2
 
       - name: Configure g4wgpu with Geant4
         shell: bash
@@ -133,6 +140,8 @@ jobs:
         env:
           LD_LIBRARY_PATH: /tmp/geant4-install/lib
           G4ENSDFSTATEDATA: /tmp/geant4-data/G4ENSDFSTATE3.0
+          G4LEDATA: /tmp/geant4-data/G4EMLOW9.0
+          G4LEVELGAMMADATA: /tmp/geant4-data/PhotonEvaporation6.1.2
         run: ctest --test-dir build-g4 --output-on-failure --no-tests=error
 
 
@@ -156,13 +165,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libexpat1-dev mesa-vulkan-drivers
 
-      - name: Install minimal Geant4 runtime dataset
+      - name: Install Geant4 runtime datasets
         shell: bash
         run: |
           mkdir -p /tmp/geant4-data
           curl -fsSL https://cern.ch/geant4-data/datasets/G4ENSDFSTATE.3.0.tar.gz \
             | tar -xz -C /tmp/geant4-data
+          curl -fsSL https://cern.ch/geant4-data/datasets/G4EMLOW.9.0.tar.gz \
+            | tar -xz -C /tmp/geant4-data
+          curl -fsSL https://cern.ch/geant4-data/datasets/G4PhotonEvaporation.6.1.2.tar.gz \
+            | tar -xz -C /tmp/geant4-data
+
           test -d /tmp/geant4-data/G4ENSDFSTATE3.0
+          test -d /tmp/geant4-data/G4EMLOW9.0
+          test -d /tmp/geant4-data/PhotonEvaporation6.1.2
 
       - name: Build pinned wgpu-native
         shell: bash
@@ -194,4 +210,7 @@ jobs:
           LD_LIBRARY_PATH: /tmp/geant4-install/lib:/tmp/wgpu-native/target/release
           WGPU_BACKEND: vulkan
           G4ENSDFSTATEDATA: /tmp/geant4-data/G4ENSDFSTATE3.0
-        run: ctest --test-dir build-shadow -R '^g4wgpu\.geant4_webgpu_shadow$' --output-on-failure --no-tests=error
+          G4LEDATA: /tmp/geant4-data/G4EMLOW9.0
+          G4LEVELGAMMADATA: /tmp/geant4-data/PhotonEvaporation6.1.2
+        run: ctest --test-dir build-shadow -R '^g4wgpu\.geant4_webgpu_shadow
+ --output-on-failure --no-tests=error
