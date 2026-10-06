@@ -5,6 +5,8 @@
 
 #include "G4VTrackingManager.hh"
 
+#include "g4wgpu/KleinNishina.hh"
+#include "g4wgpu/PhysicsBackend.hh"
 #include "g4wgpu/TrackBatch.hh"
 #include "g4wgpu/TrackingPolicy.hh"
 
@@ -16,7 +18,8 @@ namespace g4wgpu {
 class G4WgpuTrackingManager final : public G4VTrackingManager {
  public:
   explicit G4WgpuTrackingManager(
-      TrackingPolicy policy = {});
+      TrackingPolicy policy = {},
+      PhysicsBackend* shadow_physics_backend = nullptr);
   ~G4WgpuTrackingManager() override;
 
   G4WgpuTrackingManager(
@@ -47,6 +50,15 @@ class G4WgpuTrackingManager final : public G4VTrackingManager {
     return last_flushed_batch_;
   }
 
+  [[nodiscard]] const std::vector<KleinNishinaSample>&
+  last_shadow_samples() const noexcept {
+    return last_shadow_samples_;
+  }
+
+  [[nodiscard]] bool shadow_physics_enabled() const noexcept {
+    return shadow_physics_backend_ != nullptr;
+  }
+
  private:
   bool is_gpu_candidate(const G4Track& track) const;
   void flush_buffer();
@@ -55,8 +67,10 @@ class G4WgpuTrackingManager final : public G4VTrackingManager {
       const std::vector<G4Track*>& tracks) const;
 
   TrackingPolicy policy_;
+  PhysicsBackend* shadow_physics_backend_ = nullptr;
   std::vector<G4Track*> buffered_tracks_;
   TrackBatch last_flushed_batch_;
+  std::vector<KleinNishinaSample> last_shadow_samples_;
   std::size_t last_flushed_batch_size_ = 0;
 };
 
