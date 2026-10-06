@@ -47,3 +47,7 @@ performance benchmark.
 
 Performance benchmarking on NVIDIA/AMD/Intel/Apple hardware is a separate
 milestone.
+
+## Validation branch state
+
+This PR is validated after rebuilding directly on the current `main` branch.
