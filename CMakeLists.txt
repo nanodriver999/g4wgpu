@@ -109,6 +109,7 @@ if(G4WGPU_ENABLE_GEANT4)
     add_library(g4wgpu_geant4
         src/geant4/G4WgpuTrackingManager.cc
         src/geant4/TrackBatchConversion.cc
+        src/geant4/MaterialConversion.cc
     )
     add_library(g4wgpu::geant4 ALIAS g4wgpu_geant4)
 
@@ -173,6 +174,20 @@ if(G4WGPU_ENABLE_GEANT4)
         add_test(
             NAME g4wgpu.geant4_compton_cross_section
             COMMAND g4wgpu_geant4_compton_cross_section_test
+        )
+
+        add_executable(g4wgpu_geant4_material_interaction_test
+            tests/integration/test_geant4_material_interaction.cc
+        )
+        target_link_libraries(g4wgpu_geant4_material_interaction_test
+            PRIVATE
+                g4wgpu::geant4
+                ${Geant4_LIBRARIES}
+        )
+
+        add_test(
+            NAME g4wgpu.geant4_material_interaction
+            COMMAND g4wgpu_geant4_material_interaction_test
         )
 
         if(G4WGPU_ENABLE_WEBGPU AND G4WGPU_RUN_GPU_TESTS)
