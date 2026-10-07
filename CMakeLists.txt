@@ -21,6 +21,7 @@ add_library(g4wgpu_core
     src/core/TrackingPolicy.cc
     src/physics/KleinNishina.cc
     src/physics/ComptonCrossSection.cc
+    src/physics/MaterialInteraction.cc
     src/cpu/CpuBackend.cc
 )
 
@@ -232,6 +233,17 @@ if(G4WGPU_BUILD_TESTING)
     add_test(
         NAME g4wgpu.compton_cross_section
         COMMAND g4wgpu_compton_cross_section_test
+    )
+
+    add_executable(g4wgpu_material_interaction_test
+        tests/numerical/test_material_interaction.cc
+    )
+    target_link_libraries(g4wgpu_material_interaction_test
+        PRIVATE g4wgpu::core)
+
+    add_test(
+        NAME g4wgpu.material_interaction
+        COMMAND g4wgpu_material_interaction_test
     )
 
     add_executable(g4wgpu_tracking_policy_test
