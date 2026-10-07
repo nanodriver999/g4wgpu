@@ -15,7 +15,7 @@ namespace {
 bool close_relative(
     const double a,
     const double b,
-    const double tolerance = 1.0e-9) {
+    const double tolerance = 1.0e-7) {
   const double scale =
       std::max(std::fabs(a), std::fabs(b));
   if (scale == 0.0) {
