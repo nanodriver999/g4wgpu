@@ -25,6 +25,7 @@ add_library(g4wgpu_core
     src/physics/GammaProcessCompetition.cc
     src/physics/PhotoelectricCrossSection.cc
     src/physics/PairProductionCrossSection.cc
+    src/physics/PortableGammaCrossSections.cc
     src/cpu/CpuBackend.cc
 )
 
@@ -339,6 +340,17 @@ if(G4WGPU_BUILD_TESTING)
     add_test(
         NAME g4wgpu.pair_production_cross_section
         COMMAND g4wgpu_pair_production_cross_section_test
+    )
+
+    add_executable(g4wgpu_portable_gamma_cross_sections_test
+        tests/numerical/test_portable_gamma_cross_sections.cc
+    )
+    target_link_libraries(g4wgpu_portable_gamma_cross_sections_test
+        PRIVATE g4wgpu::core)
+
+    add_test(
+        NAME g4wgpu.portable_gamma_cross_sections
+        COMMAND g4wgpu_portable_gamma_cross_sections_test
     )
 
     add_executable(g4wgpu_tracking_policy_test
