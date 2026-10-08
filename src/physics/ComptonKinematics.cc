@@ -1,5 +1,6 @@
 #include "g4wgpu/ComptonKinematics.hh"
 
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
 
