@@ -225,22 +225,23 @@ void G4WgpuTrackingManager::flush_buffer() {
   last_shadow_process_competition_.clear();
   if (shadow_physics_backend_ != nullptr) {
     std::vector<RngAddress> rng(last_flushed_batch_.size());
-    last_shadow_process_competition_.reserve(
+    std::vector<RngAddress> competition_rng(
+        last_flushed_batch_.size());
+    std::vector<GammaProcessCrossSections> cross_sections(
         last_flushed_batch_.size());
 
     for (std::size_t i = 0; i < last_flushed_batch_.size(); ++i) {
-      const auto* track = buffered_tracks_[i];
-
-      auto competition_rng = RngAddress{
+      const RngAddress address{
           last_flushed_batch_.rng_stream_lo[i],
           last_flushed_batch_.rng_stream_hi[i],
           last_flushed_batch_.rng_counter_lo[i],
           last_flushed_batch_.rng_counter_hi[i]};
+      rng[i] = address;
+      competition_rng[i] = address;
 
+      const auto* track = buffered_tracks_[i];
       const double energy_mev =
           last_flushed_batch_.kinetic_energy[i];
-
-      GammaProcessCrossSections cross_sections;
 
       // G4Track::GetMaterial() is unsafe before the first G4Step exists.
       // Resolve pre-tracking primaries through a private navigator instead.
@@ -255,26 +256,19 @@ void G4WgpuTrackingManager::flush_buffer() {
                 *material,
                 energy_mev);
 
-        cross_sections =
+        cross_sections[i] =
             portable_gamma_process_cross_sections(
                 material_view,
                 photoelectric_segment,
                 energy_mev);
       }
-
-      last_shadow_process_competition_.push_back(
-          sample_gamma_process_competition(
-              cross_sections,
-              competition_rng));
     }
 
-    for (std::size_t i = 0; i < last_flushed_batch_.size(); ++i) {
-      rng[i] = RngAddress{
-          last_flushed_batch_.rng_stream_lo[i],
-          last_flushed_batch_.rng_stream_hi[i],
-          last_flushed_batch_.rng_counter_lo[i],
-          last_flushed_batch_.rng_counter_hi[i]};
-    }
+    last_shadow_process_competition_ =
+        shadow_physics_backend_
+            ->sample_gamma_process_competition_batch(
+                cross_sections,
+                competition_rng);
 
     last_shadow_samples_ =
         shadow_physics_backend_->sample_klein_nishina_batch(
