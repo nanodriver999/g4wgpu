@@ -128,10 +128,13 @@ int main() {
   const auto& shadow = tracking_manager.last_shadow_samples();
   const auto& competition =
       tracking_manager.last_shadow_process_competition();
+  const auto& final_states =
+      tracking_manager.last_shadow_compton_final_states();
 
   if (!tracking_manager.shadow_physics_enabled() ||
       shadow.size() != 1u ||
-      competition.size() != 1u) {
+      competition.size() != 1u ||
+      final_states.size() != 1u) {
     std::cerr << "shadow physics sampling did not execute correctly\n";
     delete run_manager;
     return EXIT_FAILURE;
@@ -149,10 +152,41 @@ int main() {
   const bool selected_compton =
       competition[0].process == g4wgpu::GammaProcess::compton;
 
-  if (shadow[0].accepted != selected_compton) {
-    std::cerr << "Klein-Nishina sampling was not gated by Compton selection\n";
+  if (shadow[0].accepted != selected_compton ||
+      final_states[0].has_value() != selected_compton) {
+    std::cerr << "Compton shadow final state was not gated by process selection\n";
     delete run_manager;
     return EXIT_FAILURE;
+  }
+
+  if (selected_compton) {
+    const auto& final_state = *final_states[0];
+    const double gamma_norm = std::sqrt(
+        final_state.scattered_gamma_direction.x *
+            final_state.scattered_gamma_direction.x +
+        final_state.scattered_gamma_direction.y *
+            final_state.scattered_gamma_direction.y +
+        final_state.scattered_gamma_direction.z *
+            final_state.scattered_gamma_direction.z);
+    const double electron_norm = std::sqrt(
+        final_state.recoil_electron_direction.x *
+            final_state.recoil_electron_direction.x +
+        final_state.recoil_electron_direction.y *
+            final_state.recoil_electron_direction.y +
+        final_state.recoil_electron_direction.z *
+            final_state.recoil_electron_direction.z);
+
+    if (!close_enough(
+            final_state.scattered_gamma_energy_mev +
+                final_state.recoil_electron_kinetic_energy_mev,
+            1.0,
+            5.0e-5) ||
+        !close_enough(gamma_norm, 1.0, 1.0e-10) ||
+        !close_enough(electron_norm, 1.0, 1.0e-10)) {
+      std::cerr << "Compton shadow lab-frame final state is invalid\n";
+      delete run_manager;
+      return EXIT_FAILURE;
+    }
   }
 
   if (selected_compton &&
