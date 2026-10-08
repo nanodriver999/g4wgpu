@@ -16,6 +16,7 @@
 #include "G4TrackingManager.hh"
 #include "G4VProcess.hh"
 
+#include "g4wgpu/geant4/Geant4GammaCrossSections.hh"
 #include "g4wgpu/geant4/TrackBatchConversion.hh"
 
 namespace g4wgpu {
@@ -154,6 +155,7 @@ void G4WgpuTrackingManager::flush_buffer() {
   if (buffered_tracks_.empty()) {
     last_flushed_batch_.resize(0);
     last_shadow_samples_.clear();
+    last_shadow_process_competition_.clear();
     last_flushed_batch_size_ = 0;
     return;
   }
@@ -164,8 +166,35 @@ void G4WgpuTrackingManager::flush_buffer() {
       last_flushed_batch_.size();
 
   last_shadow_samples_.clear();
+  last_shadow_process_competition_.clear();
   if (shadow_physics_backend_ != nullptr) {
     std::vector<RngAddress> rng(last_flushed_batch_.size());
+    last_shadow_process_competition_.reserve(
+        last_flushed_batch_.size());
+
+    for (std::size_t i = 0; i < last_flushed_batch_.size(); ++i) {
+      const auto* material = buffered_tracks_[i]->GetMaterial();
+      if (material == nullptr) {
+        throw std::runtime_error(
+            "shadow process competition requires a Geant4 material");
+      }
+
+      auto competition_rng = RngAddress{
+          last_flushed_batch_.rng_stream_lo[i],
+          last_flushed_batch_.rng_stream_hi[i],
+          last_flushed_batch_.rng_counter_lo[i],
+          last_flushed_batch_.rng_counter_hi[i]};
+
+      const auto cross_sections =
+          geant4_gamma_process_cross_sections(
+              *material,
+              last_flushed_batch_.kinetic_energy[i]);
+
+      last_shadow_process_competition_.push_back(
+          sample_gamma_process_competition(
+              cross_sections,
+              competition_rng));
+    }
 
     for (std::size_t i = 0; i < last_flushed_batch_.size(); ++i) {
       rng[i] = RngAddress{
@@ -183,6 +212,11 @@ void G4WgpuTrackingManager::flush_buffer() {
     if (last_shadow_samples_.size() != last_flushed_batch_.size()) {
       throw std::runtime_error(
           "shadow physics backend returned an unexpected sample count");
+    }
+    if (last_shadow_process_competition_.size() !=
+        last_flushed_batch_.size()) {
+      throw std::runtime_error(
+          "shadow process competition returned an unexpected sample count");
     }
   }
 
