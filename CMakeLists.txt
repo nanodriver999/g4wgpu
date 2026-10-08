@@ -23,6 +23,7 @@ add_library(g4wgpu_core
     src/physics/ComptonCrossSection.cc
     src/physics/MaterialInteraction.cc
     src/physics/GammaProcessCompetition.cc
+    src/physics/PhotoelectricCrossSection.cc
     src/cpu/CpuBackend.cc
 )
 
@@ -112,6 +113,7 @@ if(G4WGPU_ENABLE_GEANT4)
         src/geant4/TrackBatchConversion.cc
         src/geant4/MaterialConversion.cc
         src/geant4/Geant4GammaCrossSections.cc
+        src/geant4/PhotoelectricSandiaConversion.cc
     )
     add_library(g4wgpu::geant4 ALIAS g4wgpu_geant4)
 
@@ -206,6 +208,20 @@ if(G4WGPU_ENABLE_GEANT4)
             COMMAND g4wgpu_geant4_gamma_process_cross_sections_test
         )
 
+        add_executable(g4wgpu_geant4_photoelectric_sandia_test
+            tests/integration/test_geant4_photoelectric_sandia.cc
+        )
+        target_link_libraries(g4wgpu_geant4_photoelectric_sandia_test
+            PRIVATE
+                g4wgpu::geant4
+                ${Geant4_LIBRARIES}
+        )
+
+        add_test(
+            NAME g4wgpu.geant4_photoelectric_sandia
+            COMMAND g4wgpu_geant4_photoelectric_sandia_test
+        )
+
         if(G4WGPU_ENABLE_WEBGPU AND G4WGPU_RUN_GPU_TESTS)
             add_executable(g4wgpu_geant4_webgpu_shadow_test
                 tests/integration/test_geant4_webgpu_shadow.cc
@@ -286,6 +302,17 @@ if(G4WGPU_BUILD_TESTING)
     add_test(
         NAME g4wgpu.gamma_process_competition
         COMMAND g4wgpu_gamma_process_competition_test
+    )
+
+    add_executable(g4wgpu_photoelectric_cross_section_test
+        tests/numerical/test_photoelectric_cross_section.cc
+    )
+    target_link_libraries(g4wgpu_photoelectric_cross_section_test
+        PRIVATE g4wgpu::core)
+
+    add_test(
+        NAME g4wgpu.photoelectric_cross_section
+        COMMAND g4wgpu_photoelectric_cross_section_test
     )
 
     add_executable(g4wgpu_tracking_policy_test
