@@ -26,15 +26,15 @@ GammaProcessCrossSections geant4_gamma_process_cross_sections(
   // Multiplying by mm converts to the portable mm^-1 numerical contract.
   GammaProcessCrossSections result;
   result.compton_per_mm =
-      calculator.GetCrossSectionPerVolume(
+      calculator.ComputeCrossSectionPerVolume(
           energy, gamma, "compt", &material) *
       CLHEP::mm;
   result.photoelectric_per_mm =
-      calculator.GetCrossSectionPerVolume(
+      calculator.ComputeCrossSectionPerVolume(
           energy, gamma, "phot", &material) *
       CLHEP::mm;
   result.pair_production_per_mm =
-      calculator.GetCrossSectionPerVolume(
+      calculator.ComputeCrossSectionPerVolume(
           energy, gamma, "conv", &material) *
       CLHEP::mm;
 
