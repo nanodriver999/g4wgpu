@@ -10,14 +10,18 @@
 
 #include "G4Box.hh"
 #include "G4EmStandardPhysics.hh"
+#include "G4Event.hh"
+#include "G4Gamma.hh"
 #include "G4LogicalVolume.hh"
 #include "G4NistManager.hh"
 #include "G4PVPlacement.hh"
+#include "G4ParticleGun.hh"
 #include "G4RunManager.hh"
 #include "G4SystemOfUnits.hh"
 #include "G4ThreeVector.hh"
 #include "G4VModularPhysicsList.hh"
 #include "G4VUserDetectorConstruction.hh"
+#include "G4VUserPrimaryGeneratorAction.hh"
 
 namespace {
 
@@ -62,6 +66,26 @@ class EmPhysicsList final : public G4VModularPhysicsList {
   }
 };
 
+class PrimaryGenerator final
+    : public G4VUserPrimaryGeneratorAction {
+ public:
+  PrimaryGenerator() : gun_(1) {
+    gun_.SetParticleDefinition(
+        G4Gamma::GammaDefinition());
+    gun_.SetParticleEnergy(2.0 * CLHEP::MeV);
+    gun_.SetParticlePosition(G4ThreeVector());
+    gun_.SetParticleMomentumDirection(
+        G4ThreeVector(0.0, 0.0, 1.0));
+  }
+
+  void GeneratePrimaries(G4Event* event) override {
+    gun_.GeneratePrimaryVertex(event);
+  }
+
+ private:
+  G4ParticleGun gun_;
+};
+
 bool close_relative(
     const double a,
     const double b,
@@ -82,7 +106,13 @@ int main() {
       new DetectorConstruction());
   run_manager->SetUserInitialization(
       new EmPhysicsList());
+  run_manager->SetUserAction(
+      new PrimaryGenerator());
   run_manager->Initialize();
+
+  // Complete one normal event so Geant4 builds the material-cuts couples and
+  // EM physics tables used by G4EmCalculator::GetCrossSectionPerVolume().
+  run_manager->BeamOn(1);
 
   const auto* water =
       G4NistManager::Instance()
