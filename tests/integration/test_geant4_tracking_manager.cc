@@ -131,10 +131,7 @@ int main() {
 
   if (!tracking_manager.shadow_physics_enabled() ||
       shadow.size() != 1u ||
-      competition.size() != 1u ||
-      !shadow[0].accepted ||
-      shadow[0].scattered_gamma_energy_mev <= 0.0 ||
-      shadow[0].scattered_gamma_energy_mev > 1.0) {
+      competition.size() != 1u) {
     std::cerr << "shadow physics sampling did not execute correctly\n";
     delete run_manager;
     return EXIT_FAILURE;
@@ -142,8 +139,26 @@ int main() {
 
   if (!(competition[0].total_cross_section_per_mm > 0.0) ||
       !(competition[0].distance_mm > 0.0) ||
-      !std::isfinite(competition[0].distance_mm)) {
+      !std::isfinite(competition[0].distance_mm) ||
+      competition[0].process == g4wgpu::GammaProcess::none) {
     std::cerr << "shadow process competition did not execute correctly\n";
+    delete run_manager;
+    return EXIT_FAILURE;
+  }
+
+  const bool selected_compton =
+      competition[0].process == g4wgpu::GammaProcess::compton;
+
+  if (shadow[0].accepted != selected_compton) {
+    std::cerr << "Klein-Nishina sampling was not gated by Compton selection\n";
+    delete run_manager;
+    return EXIT_FAILURE;
+  }
+
+  if (selected_compton &&
+      (!(shadow[0].scattered_gamma_energy_mev > 0.0) ||
+       shadow[0].scattered_gamma_energy_mev > 1.0)) {
+    std::cerr << "selected Compton shadow sample is outside energy range\n";
     delete run_manager;
     return EXIT_FAILURE;
   }

@@ -98,8 +98,7 @@ int main() {
   if (tracking_manager.pending_track_count() != 0u ||
       batch.size() != 1u ||
       shadow.size() != 1u ||
-      competition.size() != 1u ||
-      !shadow[0].accepted) {
+      competition.size() != 1u) {
     std::cerr << "Geant4 -> WebGPU shadow pipeline did not complete\n";
     delete run_manager;
     return EXIT_FAILURE;
@@ -107,13 +106,24 @@ int main() {
 
   if (!(competition[0].total_cross_section_per_mm > 0.0) ||
       !(competition[0].distance_mm > 0.0) ||
-      !std::isfinite(competition[0].distance_mm)) {
+      !std::isfinite(competition[0].distance_mm) ||
+      competition[0].process == g4wgpu::GammaProcess::none) {
     std::cerr << "Geant4 shadow process competition did not complete\n";
     delete run_manager;
     return EXIT_FAILURE;
   }
 
-  if (!(shadow[0].scattered_gamma_energy_mev > 0.0 &&
+  const bool selected_compton =
+      competition[0].process == g4wgpu::GammaProcess::compton;
+
+  if (shadow[0].accepted != selected_compton) {
+    std::cerr << "WebGPU Klein-Nishina sampling was not gated by process selection\n";
+    delete run_manager;
+    return EXIT_FAILURE;
+  }
+
+  if (selected_compton &&
+      !(shadow[0].scattered_gamma_energy_mev > 0.0 &&
         shadow[0].scattered_gamma_energy_mev <=
             batch.kinetic_energy[0])) {
     std::cerr << "WebGPU shadow result is outside physical energy range\n";

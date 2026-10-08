@@ -224,7 +224,6 @@ void G4WgpuTrackingManager::flush_buffer() {
   last_shadow_samples_.clear();
   last_shadow_process_competition_.clear();
   if (shadow_physics_backend_ != nullptr) {
-    std::vector<RngAddress> rng(last_flushed_batch_.size());
     std::vector<RngAddress> competition_rng(
         last_flushed_batch_.size());
     std::vector<GammaProcessCrossSections> cross_sections(
@@ -236,7 +235,6 @@ void G4WgpuTrackingManager::flush_buffer() {
           last_flushed_batch_.rng_stream_hi[i],
           last_flushed_batch_.rng_counter_lo[i],
           last_flushed_batch_.rng_counter_hi[i]};
-      rng[i] = address;
       competition_rng[i] = address;
 
       const auto* track = buffered_tracks_[i];
@@ -270,19 +268,49 @@ void G4WgpuTrackingManager::flush_buffer() {
                 cross_sections,
                 competition_rng);
 
-    last_shadow_samples_ =
-        shadow_physics_backend_->sample_klein_nishina_batch(
-            last_flushed_batch_.kinetic_energy,
-            rng);
-
-    if (last_shadow_samples_.size() != last_flushed_batch_.size()) {
-      throw std::runtime_error(
-          "shadow physics backend returned an unexpected sample count");
-    }
     if (last_shadow_process_competition_.size() !=
         last_flushed_batch_.size()) {
       throw std::runtime_error(
           "shadow process competition returned an unexpected sample count");
+    }
+
+    // Only tracks for which process competition selected Compton should run
+    // the Klein-Nishina final-state sampler. Continue from the RNG counters
+    // consumed by process competition so the two stages do not reuse draws.
+    std::vector<std::size_t> compton_indices;
+    std::vector<double> compton_energies;
+    std::vector<RngAddress> compton_rng;
+    compton_indices.reserve(last_flushed_batch_.size());
+    compton_energies.reserve(last_flushed_batch_.size());
+    compton_rng.reserve(last_flushed_batch_.size());
+
+    for (std::size_t i = 0; i < last_flushed_batch_.size(); ++i) {
+      if (last_shadow_process_competition_[i].process ==
+          GammaProcess::compton) {
+        compton_indices.push_back(i);
+        compton_energies.push_back(
+            last_flushed_batch_.kinetic_energy[i]);
+        compton_rng.push_back(competition_rng[i]);
+      }
+    }
+
+    last_shadow_samples_.assign(
+        last_flushed_batch_.size(),
+        KleinNishinaSample{});
+
+    const auto compton_samples =
+        shadow_physics_backend_->sample_klein_nishina_batch(
+            compton_energies,
+            compton_rng);
+
+    if (compton_samples.size() != compton_indices.size()) {
+      throw std::runtime_error(
+          "shadow Compton sampler returned an unexpected sample count");
+    }
+
+    for (std::size_t i = 0; i < compton_indices.size(); ++i) {
+      last_shadow_samples_[compton_indices[i]] =
+          compton_samples[i];
     }
   }
 
