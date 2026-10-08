@@ -1,7 +1,6 @@
 #include "g4wgpu/geant4/G4WgpuTrackingManager.hh"
 
 #include <cstdint>
-#include <iostream>
 #include <stdexcept>
 
 #include "G4Event.hh"
@@ -126,7 +125,6 @@ void G4WgpuTrackingManager::HandOverOneTrack(
         "G4WgpuTrackingManager received a null track");
   }
 
-  std::cerr << "g4wgpu-shadow-flow:handover\n";
   if (!is_gpu_candidate(*track)) {
     process_with_default_tracking(track);
     return;
@@ -158,7 +156,6 @@ TrackBatch G4WgpuTrackingManager::make_batch(
 }
 
 void G4WgpuTrackingManager::flush_buffer() {
-  std::cerr << "g4wgpu-shadow-flow:flush-start\n";
   if (buffered_tracks_.empty()) {
     last_flushed_batch_.resize(0);
     last_shadow_samples_.clear();
@@ -167,11 +164,8 @@ void G4WgpuTrackingManager::flush_buffer() {
     return;
   }
 
-  std::cerr << "g4wgpu-shadow-flow:before-batch\n";
   last_flushed_batch_ = make_batch(buffered_tracks_);
-  std::cerr << "g4wgpu-shadow-flow:after-batch\n";
   last_flushed_batch_.validate();
-  std::cerr << "g4wgpu-shadow-flow:after-validate\n";
   last_flushed_batch_size_ =
       last_flushed_batch_.size();
 
@@ -183,13 +177,7 @@ void G4WgpuTrackingManager::flush_buffer() {
         last_flushed_batch_.size());
 
     for (std::size_t i = 0; i < last_flushed_batch_.size(); ++i) {
-      std::cerr << "g4wgpu-shadow-flow:before-material\n";
-      const auto* material = buffered_tracks_[i]->GetMaterial();
-      std::cerr << "g4wgpu-shadow-flow:after-material\n";
-      if (material == nullptr) {
-        throw std::runtime_error(
-            "shadow process competition requires a Geant4 material");
-      }
+      const auto* track = buffered_tracks_[i];
 
       auto competition_rng = RngAddress{
           last_flushed_batch_.rng_stream_lo[i],
@@ -199,32 +187,45 @@ void G4WgpuTrackingManager::flush_buffer() {
 
       const double energy_mev =
           last_flushed_batch_.kinetic_energy[i];
-      std::cerr << "g4wgpu-shadow-xs:A\n";
-      const auto material_view =
-          make_material_view_from_geant4(*material);
-      std::cerr << "g4wgpu-shadow-xs:B\n";
-      const auto photoelectric_segment =
-          make_photoelectric_sandia_segment_from_geant4(
-              *material,
-              energy_mev);
-      std::cerr << "g4wgpu-shadow-xs:C\n";
 
       GammaProcessCrossSections cross_sections;
-      cross_sections.compton_per_mm =
-          compton_macroscopic_cross_section_per_mm(
-              material_view,
-              energy_mev);
-      std::cerr << "g4wgpu-shadow-xs:D\n";
-      cross_sections.photoelectric_per_mm =
-          photoelectric_macroscopic_cross_section_per_mm(
-              photoelectric_segment,
-              energy_mev);
-      std::cerr << "g4wgpu-shadow-xs:E\n";
-      cross_sections.pair_production_per_mm =
-          pair_production_macroscopic_cross_section_per_mm(
-              material_view,
-              energy_mev);
-      std::cerr << "g4wgpu-shadow-xs:F\n";
+
+      // Tracks are handed to a custom tracking manager before
+      // G4TrackingManager::ProcessOneTrack() calls SetInitialStep(). At that
+      // point G4Track::GetMaterial() is unsafe because it dereferences a null
+      // G4Step. If a material is already available, evaluate the portable
+      // competition inputs; otherwise record a no-interaction shadow sample.
+      const G4Material* material = nullptr;
+      if (track->GetStep() != nullptr) {
+        material = track->GetMaterial();
+      } else if (track->GetVolume() != nullptr &&
+                 track->GetVolume()->GetLogicalVolume() != nullptr) {
+        material = track->GetVolume()->GetLogicalVolume()->GetMaterial();
+      } else if (track->GetLogicalVolumeAtVertex() != nullptr) {
+        material = track->GetLogicalVolumeAtVertex()->GetMaterial();
+      }
+
+      if (material != nullptr) {
+        const auto material_view =
+            make_material_view_from_geant4(*material);
+        const auto photoelectric_segment =
+            make_photoelectric_sandia_segment_from_geant4(
+                *material,
+                energy_mev);
+
+        cross_sections.compton_per_mm =
+            compton_macroscopic_cross_section_per_mm(
+                material_view,
+                energy_mev);
+        cross_sections.photoelectric_per_mm =
+            photoelectric_macroscopic_cross_section_per_mm(
+                photoelectric_segment,
+                energy_mev);
+        cross_sections.pair_production_per_mm =
+            pair_production_macroscopic_cross_section_per_mm(
+                material_view,
+                energy_mev);
+      }
 
       last_shadow_process_competition_.push_back(
           sample_gamma_process_competition(
