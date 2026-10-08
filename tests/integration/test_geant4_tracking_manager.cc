@@ -126,13 +126,24 @@ int main() {
 
   const auto& batch = tracking_manager.last_flushed_batch();
   const auto& shadow = tracking_manager.last_shadow_samples();
+  const auto& competition =
+      tracking_manager.last_shadow_process_competition();
 
   if (!tracking_manager.shadow_physics_enabled() ||
       shadow.size() != 1u ||
+      competition.size() != 1u ||
       !shadow[0].accepted ||
       shadow[0].scattered_gamma_energy_mev <= 0.0 ||
       shadow[0].scattered_gamma_energy_mev > 1.0) {
     std::cerr << "shadow physics sampling did not execute correctly\n";
+    delete run_manager;
+    return EXIT_FAILURE;
+  }
+
+  if (!(competition[0].total_cross_section_per_mm >= 0.0) ||
+      !(competition[0].distance_mm > 0.0 ||
+        std::isinf(competition[0].distance_mm))) {
+    std::cerr << "shadow process competition did not execute correctly\n";
     delete run_manager;
     return EXIT_FAILURE;
   }
