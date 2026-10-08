@@ -14,6 +14,8 @@
 #include "G4Track.hh"
 #include "G4TrackStatus.hh"
 #include "G4TrackingManager.hh"
+#include "G4TransportationManager.hh"
+#include "G4VPhysicalVolume.hh"
 #include "G4VProcess.hh"
 
 #include "g4wgpu/MaterialInteraction.hh"
@@ -24,6 +26,58 @@
 #include "g4wgpu/geant4/TrackBatchConversion.hh"
 
 namespace g4wgpu {
+namespace {
+
+const G4Material* resolve_track_material(
+    const G4Track& track) {
+  if (track.GetStep() != nullptr) {
+    return track.GetMaterial();
+  }
+
+  if (track.GetVolume() != nullptr &&
+      track.GetVolume()->GetLogicalVolume() != nullptr) {
+    return track.GetVolume()->GetLogicalVolume()->GetMaterial();
+  }
+
+  if (track.GetLogicalVolumeAtVertex() != nullptr) {
+    return track.GetLogicalVolumeAtVertex()->GetMaterial();
+  }
+
+  // Custom tracking managers receive primaries before
+  // G4SteppingManager::SetInitialStep() creates the touchable/step. Resolve
+  // the volume with a private navigator so we do not mutate the track or the
+  // tracking navigator's state.
+  auto* transportation =
+      G4TransportationManager::GetTransportationManager();
+  auto* tracking_navigator =
+      transportation != nullptr
+          ? transportation->GetNavigatorForTracking()
+          : nullptr;
+  auto* world =
+      tracking_navigator != nullptr
+          ? tracking_navigator->GetWorldVolume()
+          : nullptr;
+  if (world == nullptr) {
+    return nullptr;
+  }
+
+  G4Navigator navigator;
+  navigator.SetWorldVolume(world);
+  auto direction = track.GetMomentumDirection();
+  auto* volume =
+      navigator.LocateGlobalPointAndSetup(
+          track.GetPosition(),
+          &direction,
+          false,
+          false);
+  return volume != nullptr &&
+                 volume->GetLogicalVolume() != nullptr
+             ? volume->GetLogicalVolume()->GetMaterial()
+             : nullptr;
+}
+
+}  // namespace
+
 namespace {
 
 void forward_process_table_build(
@@ -190,20 +244,10 @@ void G4WgpuTrackingManager::flush_buffer() {
 
       GammaProcessCrossSections cross_sections;
 
-      // Tracks are handed to a custom tracking manager before
-      // G4TrackingManager::ProcessOneTrack() calls SetInitialStep(). At that
-      // point G4Track::GetMaterial() is unsafe because it dereferences a null
-      // G4Step. If a material is already available, evaluate the portable
-      // competition inputs; otherwise record a no-interaction shadow sample.
-      const G4Material* material = nullptr;
-      if (track->GetStep() != nullptr) {
-        material = track->GetMaterial();
-      } else if (track->GetVolume() != nullptr &&
-                 track->GetVolume()->GetLogicalVolume() != nullptr) {
-        material = track->GetVolume()->GetLogicalVolume()->GetMaterial();
-      } else if (track->GetLogicalVolumeAtVertex() != nullptr) {
-        material = track->GetLogicalVolumeAtVertex()->GetMaterial();
-      }
+      // G4Track::GetMaterial() is unsafe before the first G4Step exists.
+      // Resolve pre-tracking primaries through a private navigator instead.
+      const G4Material* material =
+          resolve_track_material(*track);
 
       if (material != nullptr) {
         const auto material_view =
