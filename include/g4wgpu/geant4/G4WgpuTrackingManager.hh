@@ -5,6 +5,7 @@
 
 #include "G4VTrackingManager.hh"
 
+#include "g4wgpu/GammaProcessCompetition.hh"
 #include "g4wgpu/KleinNishina.hh"
 #include "g4wgpu/PhysicsBackend.hh"
 #include "g4wgpu/TrackBatch.hh"
@@ -55,6 +56,11 @@ class G4WgpuTrackingManager final : public G4VTrackingManager {
     return last_shadow_samples_;
   }
 
+  [[nodiscard]] const std::vector<GammaInteractionSample>&
+  last_shadow_competition_samples() const noexcept {
+    return last_shadow_competition_samples_;
+  }
+
   [[nodiscard]] bool shadow_physics_enabled() const noexcept {
     return shadow_physics_backend_ != nullptr;
   }
@@ -71,6 +77,8 @@ class G4WgpuTrackingManager final : public G4VTrackingManager {
   std::vector<G4Track*> buffered_tracks_;
   TrackBatch last_flushed_batch_;
   std::vector<KleinNishinaSample> last_shadow_samples_;
+  std::vector<GammaInteractionSample>
+      last_shadow_competition_samples_;
   std::size_t last_flushed_batch_size_ = 0;
 };
 
