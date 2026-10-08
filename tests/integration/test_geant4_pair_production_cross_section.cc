@@ -13,10 +13,12 @@
 
 namespace {
 
+// Near the 2*m_e*c^2 threshold the quadratic correction amplifies tiny
+// differences between the portable electron-mass constant and CLHEP's value.
 bool close_relative(
     const double a,
     const double b,
-    const double tolerance = 2.0e-7) {
+    const double tolerance = 1.0e-5) {
   const double scale =
       std::max(std::fabs(a), std::fabs(b));
   if (scale == 0.0) {
