@@ -1,6 +1,7 @@
 #include "g4wgpu/WebGpuBackend.hh"
 #include "g4wgpu/geant4/G4WgpuTrackingManager.hh"
 
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 
@@ -91,12 +92,23 @@ int main() {
 
   const auto& batch = tracking_manager.last_flushed_batch();
   const auto& shadow = tracking_manager.last_shadow_samples();
+  const auto& competition =
+      tracking_manager.last_shadow_process_competition();
 
   if (tracking_manager.pending_track_count() != 0u ||
       batch.size() != 1u ||
       shadow.size() != 1u ||
+      competition.size() != 1u ||
       !shadow[0].accepted) {
     std::cerr << "Geant4 -> WebGPU shadow pipeline did not complete\n";
+    delete run_manager;
+    return EXIT_FAILURE;
+  }
+
+  if (!(competition[0].total_cross_section_per_mm > 0.0) ||
+      !(competition[0].distance_mm > 0.0) ||
+      !std::isfinite(competition[0].distance_mm)) {
+    std::cerr << "Geant4 shadow process competition did not complete\n";
     delete run_manager;
     return EXIT_FAILURE;
   }

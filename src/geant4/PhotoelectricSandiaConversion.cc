@@ -20,9 +20,12 @@ PhotoelectricSandiaSegment make_photoelectric_sandia_segment_from_geant4(
   }
 
   const auto* table = material.GetSandiaTable();
-  if (table == nullptr) {
-    throw std::runtime_error(
-        "Geant4 material has no Sandia table");
+  if (table == nullptr ||
+      table->GetMatNbOfIntervals() <= 0) {
+    PhotoelectricSandiaSegment empty;
+    empty.minimum_energy_mev = 0.0;
+    empty.validate();
+    return empty;
   }
 
   const double minimum_energy_internal =

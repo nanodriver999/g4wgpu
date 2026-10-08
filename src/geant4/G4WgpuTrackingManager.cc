@@ -14,11 +14,70 @@
 #include "G4Track.hh"
 #include "G4TrackStatus.hh"
 #include "G4TrackingManager.hh"
+#include "G4TransportationManager.hh"
+#include "G4VPhysicalVolume.hh"
 #include "G4VProcess.hh"
 
+#include "g4wgpu/MaterialInteraction.hh"
+#include "g4wgpu/PairProductionCrossSection.hh"
+#include "g4wgpu/PhotoelectricCrossSection.hh"
+#include "g4wgpu/geant4/MaterialConversion.hh"
+#include "g4wgpu/geant4/PhotoelectricSandiaConversion.hh"
 #include "g4wgpu/geant4/TrackBatchConversion.hh"
 
 namespace g4wgpu {
+namespace {
+
+const G4Material* resolve_track_material(
+    const G4Track& track) {
+  if (track.GetStep() != nullptr) {
+    return track.GetMaterial();
+  }
+
+  if (track.GetVolume() != nullptr &&
+      track.GetVolume()->GetLogicalVolume() != nullptr) {
+    return track.GetVolume()->GetLogicalVolume()->GetMaterial();
+  }
+
+  if (track.GetLogicalVolumeAtVertex() != nullptr) {
+    return track.GetLogicalVolumeAtVertex()->GetMaterial();
+  }
+
+  // Custom tracking managers receive primaries before
+  // G4SteppingManager::SetInitialStep() creates the touchable/step. Resolve
+  // the volume with a private navigator so we do not mutate the track or the
+  // tracking navigator's state.
+  auto* transportation =
+      G4TransportationManager::GetTransportationManager();
+  auto* tracking_navigator =
+      transportation != nullptr
+          ? transportation->GetNavigatorForTracking()
+          : nullptr;
+  auto* world =
+      tracking_navigator != nullptr
+          ? tracking_navigator->GetWorldVolume()
+          : nullptr;
+  if (world == nullptr) {
+    return nullptr;
+  }
+
+  G4Navigator navigator;
+  navigator.SetWorldVolume(world);
+  auto direction = track.GetMomentumDirection();
+  auto* volume =
+      navigator.LocateGlobalPointAndSetup(
+          track.GetPosition(),
+          &direction,
+          false,
+          false);
+  return volume != nullptr &&
+                 volume->GetLogicalVolume() != nullptr
+             ? volume->GetLogicalVolume()->GetMaterial()
+             : nullptr;
+}
+
+}  // namespace
+
 namespace {
 
 void forward_process_table_build(
@@ -154,6 +213,7 @@ void G4WgpuTrackingManager::flush_buffer() {
   if (buffered_tracks_.empty()) {
     last_flushed_batch_.resize(0);
     last_shadow_samples_.clear();
+    last_shadow_process_competition_.clear();
     last_flushed_batch_size_ = 0;
     return;
   }
@@ -164,8 +224,58 @@ void G4WgpuTrackingManager::flush_buffer() {
       last_flushed_batch_.size();
 
   last_shadow_samples_.clear();
+  last_shadow_process_competition_.clear();
   if (shadow_physics_backend_ != nullptr) {
     std::vector<RngAddress> rng(last_flushed_batch_.size());
+    last_shadow_process_competition_.reserve(
+        last_flushed_batch_.size());
+
+    for (std::size_t i = 0; i < last_flushed_batch_.size(); ++i) {
+      const auto* track = buffered_tracks_[i];
+
+      auto competition_rng = RngAddress{
+          last_flushed_batch_.rng_stream_lo[i],
+          last_flushed_batch_.rng_stream_hi[i],
+          last_flushed_batch_.rng_counter_lo[i],
+          last_flushed_batch_.rng_counter_hi[i]};
+
+      const double energy_mev =
+          last_flushed_batch_.kinetic_energy[i];
+
+      GammaProcessCrossSections cross_sections;
+
+      // G4Track::GetMaterial() is unsafe before the first G4Step exists.
+      // Resolve pre-tracking primaries through a private navigator instead.
+      const G4Material* material =
+          resolve_track_material(*track);
+
+      if (material != nullptr) {
+        const auto material_view =
+            make_material_view_from_geant4(*material);
+        const auto photoelectric_segment =
+            make_photoelectric_sandia_segment_from_geant4(
+                *material,
+                energy_mev);
+
+        cross_sections.compton_per_mm =
+            compton_macroscopic_cross_section_per_mm(
+                material_view,
+                energy_mev);
+        cross_sections.photoelectric_per_mm =
+            photoelectric_macroscopic_cross_section_per_mm(
+                photoelectric_segment,
+                energy_mev);
+        cross_sections.pair_production_per_mm =
+            pair_production_macroscopic_cross_section_per_mm(
+                material_view,
+                energy_mev);
+      }
+
+      last_shadow_process_competition_.push_back(
+          sample_gamma_process_competition(
+              cross_sections,
+              competition_rng));
+    }
 
     for (std::size_t i = 0; i < last_flushed_batch_.size(); ++i) {
       rng[i] = RngAddress{
@@ -183,6 +293,11 @@ void G4WgpuTrackingManager::flush_buffer() {
     if (last_shadow_samples_.size() != last_flushed_batch_.size()) {
       throw std::runtime_error(
           "shadow physics backend returned an unexpected sample count");
+    }
+    if (last_shadow_process_competition_.size() !=
+        last_flushed_batch_.size()) {
+      throw std::runtime_error(
+          "shadow process competition returned an unexpected sample count");
     }
   }
 
