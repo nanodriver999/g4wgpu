@@ -2,6 +2,7 @@
 
 #include <stdexcept>
 
+#include "g4wgpu/GammaProcessCompetition.hh"
 #include "g4wgpu/KleinNishina.hh"
 
 namespace g4wgpu {
@@ -48,6 +49,28 @@ std::vector<KleinNishinaSample> CpuBackend::sample_klein_nishina_batch(
         incident_gamma_energy_mev[i],
         rng[i],
         max_iterations));
+  }
+
+  return result;
+}
+
+std::vector<GammaInteractionSample>
+CpuBackend::sample_gamma_process_competition_batch(
+    const std::vector<GammaProcessCrossSections>& cross_sections,
+    std::vector<RngAddress>& rng) {
+  if (cross_sections.size() != rng.size()) {
+    throw std::invalid_argument(
+        "gamma process competition batch and RNG state sizes differ");
+  }
+
+  std::vector<GammaInteractionSample> result;
+  result.reserve(cross_sections.size());
+
+  for (std::size_t i = 0; i < cross_sections.size(); ++i) {
+    result.push_back(
+        sample_gamma_process_competition(
+            cross_sections[i],
+            rng[i]));
   }
 
   return result;

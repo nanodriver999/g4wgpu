@@ -18,6 +18,11 @@ class CpuBackend final : public ComputeBackend, public PhysicsBackend {
       const std::vector<double>& incident_gamma_energy_mev,
       std::vector<RngAddress>& rng,
       std::uint32_t max_iterations = 1000u) override;
+
+  std::vector<GammaInteractionSample>
+  sample_gamma_process_competition_batch(
+      const std::vector<GammaProcessCrossSections>& cross_sections,
+      std::vector<RngAddress>& rng) override;
 };
 
 }  // namespace g4wgpu
