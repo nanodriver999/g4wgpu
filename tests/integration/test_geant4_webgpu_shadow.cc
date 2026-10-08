@@ -105,9 +105,9 @@ int main() {
     return EXIT_FAILURE;
   }
 
-  if (!(competition[0].total_cross_section_per_mm >= 0.0) ||
-      !(competition[0].distance_mm > 0.0 ||
-        std::isinf(competition[0].distance_mm))) {
+  if (!(competition[0].total_cross_section_per_mm > 0.0) ||
+      !(competition[0].distance_mm > 0.0) ||
+      !std::isfinite(competition[0].distance_mm)) {
     std::cerr << "Geant4 shadow process competition did not complete\n";
     delete run_manager;
     return EXIT_FAILURE;
