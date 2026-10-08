@@ -30,6 +30,11 @@ class WebGpuBackend final : public ComputeBackend, public PhysicsBackend {
       std::vector<RngAddress>& rng,
       std::uint32_t max_iterations = 1000u) override;
 
+  std::vector<GammaInteractionSample>
+  sample_gamma_process_competition_batch(
+      const std::vector<GammaProcessCrossSections>& cross_sections,
+      std::vector<RngAddress>& rng) override;
+
  private:
   class Impl;
   std::unique_ptr<Impl> impl_;
