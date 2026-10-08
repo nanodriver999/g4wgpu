@@ -24,6 +24,7 @@ add_library(g4wgpu_core
     src/physics/MaterialInteraction.cc
     src/physics/GammaProcessCompetition.cc
     src/physics/PhotoelectricCrossSection.cc
+    src/physics/PairProductionCrossSection.cc
     src/cpu/CpuBackend.cc
 )
 
@@ -222,6 +223,20 @@ if(G4WGPU_ENABLE_GEANT4)
             COMMAND g4wgpu_geant4_photoelectric_sandia_test
         )
 
+        add_executable(g4wgpu_geant4_pair_production_cross_section_test
+            tests/integration/test_geant4_pair_production_cross_section.cc
+        )
+        target_link_libraries(g4wgpu_geant4_pair_production_cross_section_test
+            PRIVATE
+                g4wgpu::geant4
+                ${Geant4_LIBRARIES}
+        )
+
+        add_test(
+            NAME g4wgpu.geant4_pair_production_cross_section
+            COMMAND g4wgpu_geant4_pair_production_cross_section_test
+        )
+
         if(G4WGPU_ENABLE_WEBGPU AND G4WGPU_RUN_GPU_TESTS)
             add_executable(g4wgpu_geant4_webgpu_shadow_test
                 tests/integration/test_geant4_webgpu_shadow.cc
@@ -313,6 +328,17 @@ if(G4WGPU_BUILD_TESTING)
     add_test(
         NAME g4wgpu.photoelectric_cross_section
         COMMAND g4wgpu_photoelectric_cross_section_test
+    )
+
+    add_executable(g4wgpu_pair_production_cross_section_test
+        tests/numerical/test_pair_production_cross_section.cc
+    )
+    target_link_libraries(g4wgpu_pair_production_cross_section_test
+        PRIVATE g4wgpu::core)
+
+    add_test(
+        NAME g4wgpu.pair_production_cross_section
+        COMMAND g4wgpu_pair_production_cross_section_test
     )
 
     add_executable(g4wgpu_tracking_policy_test
