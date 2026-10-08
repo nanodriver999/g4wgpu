@@ -1,12 +1,15 @@
 #include "g4wgpu/geant4/G4WgpuTrackingManager.hh"
 
 #include <cstdint>
+#include <limits>
 #include <stdexcept>
 
 #include "G4Event.hh"
 #include "G4EventManager.hh"
 #include "G4Exception.hh"
 #include "G4Gamma.hh"
+#include "G4LogicalVolume.hh"
+#include "G4Material.hh"
 #include "G4ParticleDefinition.hh"
 #include "G4ProcessManager.hh"
 #include "G4StackManager.hh"
@@ -14,8 +17,12 @@
 #include "G4Track.hh"
 #include "G4TrackStatus.hh"
 #include "G4TrackingManager.hh"
+#include "G4VPhysicalVolume.hh"
 #include "G4VProcess.hh"
 
+#include "g4wgpu/PortableGammaCrossSections.hh"
+#include "g4wgpu/geant4/MaterialConversion.hh"
+#include "g4wgpu/geant4/PhotoelectricSandiaConversion.hh"
 #include "g4wgpu/geant4/TrackBatchConversion.hh"
 
 namespace g4wgpu {
@@ -62,6 +69,23 @@ void forward_process_table_build(
 std::uint32_t to_u32(const G4int value) noexcept {
   return static_cast<std::uint32_t>(
       static_cast<std::int32_t>(value));
+}
+
+const G4Material* material_for_track(
+    const G4Track& track) noexcept {
+  if (const auto* material = track.GetMaterial()) {
+    return material;
+  }
+
+  const auto* volume = track.GetVolume();
+  if (volume == nullptr) {
+    return nullptr;
+  }
+
+  const auto* logical = volume->GetLogicalVolume();
+  return logical != nullptr
+             ? logical->GetMaterial()
+             : nullptr;
 }
 
 }  // namespace
@@ -154,6 +178,7 @@ void G4WgpuTrackingManager::flush_buffer() {
   if (buffered_tracks_.empty()) {
     last_flushed_batch_.resize(0);
     last_shadow_samples_.clear();
+    last_shadow_competition_samples_.clear();
     last_flushed_batch_size_ = 0;
     return;
   }
@@ -164,15 +189,55 @@ void G4WgpuTrackingManager::flush_buffer() {
       last_flushed_batch_.size();
 
   last_shadow_samples_.clear();
+  last_shadow_competition_samples_.clear();
   if (shadow_physics_backend_ != nullptr) {
     std::vector<RngAddress> rng(last_flushed_batch_.size());
+    std::vector<RngAddress> competition_rng(
+        last_flushed_batch_.size());
 
     for (std::size_t i = 0; i < last_flushed_batch_.size(); ++i) {
-      rng[i] = RngAddress{
+      const RngAddress address{
           last_flushed_batch_.rng_stream_lo[i],
           last_flushed_batch_.rng_stream_hi[i],
           last_flushed_batch_.rng_counter_lo[i],
           last_flushed_batch_.rng_counter_hi[i]};
+      rng[i] = address;
+      competition_rng[i] = address;
+    }
+
+    last_shadow_competition_samples_.reserve(
+        last_flushed_batch_.size());
+
+    for (std::size_t i = 0; i < buffered_tracks_.size(); ++i) {
+      const auto* material =
+          material_for_track(*buffered_tracks_[i]);
+
+      if (material == nullptr) {
+        last_shadow_competition_samples_.push_back(
+            GammaInteractionSample{
+                GammaProcess::none,
+                std::numeric_limits<double>::infinity(),
+                0.0});
+        continue;
+      }
+
+      const double energy_mev =
+          last_flushed_batch_.kinetic_energy[i];
+      const auto material_view =
+          make_material_view_from_geant4(*material);
+      const auto photoelectric_segment =
+          make_photoelectric_sandia_segment_from_geant4(
+              *material, energy_mev);
+      const auto cross_sections =
+          portable_gamma_process_cross_sections(
+              material_view,
+              photoelectric_segment,
+              energy_mev);
+
+      last_shadow_competition_samples_.push_back(
+          sample_gamma_process_competition(
+              cross_sections,
+              competition_rng[i]));
     }
 
     last_shadow_samples_ =
@@ -180,9 +245,11 @@ void G4WgpuTrackingManager::flush_buffer() {
             last_flushed_batch_.kinetic_energy,
             rng);
 
-    if (last_shadow_samples_.size() != last_flushed_batch_.size()) {
+    if (last_shadow_samples_.size() != last_flushed_batch_.size() ||
+        last_shadow_competition_samples_.size() !=
+            last_flushed_batch_.size()) {
       throw std::runtime_error(
-          "shadow physics backend returned an unexpected sample count");
+          "shadow physics path returned an unexpected sample count");
     }
   }
 
