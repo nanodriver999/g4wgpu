@@ -212,6 +212,7 @@ void G4WgpuTrackingManager::flush_buffer() {
     last_flushed_batch_.resize(0);
     last_shadow_samples_.clear();
     last_shadow_process_competition_.clear();
+    last_shadow_compton_final_states_.clear();
     last_flushed_batch_size_ = 0;
     return;
   }
@@ -223,6 +224,7 @@ void G4WgpuTrackingManager::flush_buffer() {
 
   last_shadow_samples_.clear();
   last_shadow_process_competition_.clear();
+  last_shadow_compton_final_states_.clear();
   if (shadow_physics_backend_ != nullptr) {
     std::vector<RngAddress> competition_rng(
         last_flushed_batch_.size());
@@ -311,6 +313,25 @@ void G4WgpuTrackingManager::flush_buffer() {
     for (std::size_t i = 0; i < compton_indices.size(); ++i) {
       last_shadow_samples_[compton_indices[i]] =
           compton_samples[i];
+    }
+
+    last_shadow_compton_final_states_.resize(
+        last_flushed_batch_.size());
+
+    for (const std::size_t index : compton_indices) {
+      const auto& sample = last_shadow_samples_[index];
+      if (!sample.accepted) {
+        continue;
+      }
+
+      last_shadow_compton_final_states_[index] =
+          make_compton_final_state(
+              last_flushed_batch_.kinetic_energy[index],
+              Vector3{
+                  last_flushed_batch_.direction_x[index],
+                  last_flushed_batch_.direction_y[index],
+                  last_flushed_batch_.direction_z[index]},
+              sample);
     }
   }
 

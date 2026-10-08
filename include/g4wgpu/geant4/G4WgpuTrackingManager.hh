@@ -1,10 +1,12 @@
 #pragma once
 
 #include <cstddef>
+#include <optional>
 #include <vector>
 
 #include "G4VTrackingManager.hh"
 
+#include "g4wgpu/ComptonKinematics.hh"
 #include "g4wgpu/GammaProcessCompetition.hh"
 #include "g4wgpu/KleinNishina.hh"
 #include "g4wgpu/PhysicsBackend.hh"
@@ -61,6 +63,11 @@ class G4WgpuTrackingManager final : public G4VTrackingManager {
     return last_shadow_process_competition_;
   }
 
+  [[nodiscard]] const std::vector<std::optional<ComptonFinalState>>&
+  last_shadow_compton_final_states() const noexcept {
+    return last_shadow_compton_final_states_;
+  }
+
   [[nodiscard]] bool shadow_physics_enabled() const noexcept {
     return shadow_physics_backend_ != nullptr;
   }
@@ -78,6 +85,8 @@ class G4WgpuTrackingManager final : public G4VTrackingManager {
   TrackBatch last_flushed_batch_;
   std::vector<KleinNishinaSample> last_shadow_samples_;
   std::vector<GammaInteractionSample> last_shadow_process_competition_;
+  std::vector<std::optional<ComptonFinalState>>
+      last_shadow_compton_final_states_;
   std::size_t last_flushed_batch_size_ = 0;
 };
 
