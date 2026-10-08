@@ -84,6 +84,7 @@ if(G4WGPU_ENABLE_WEBGPU)
         PRIVATE
             src/webgpu/WebGpuBackend.cc
             src/webgpu/WebGpuKleinNishina.cc
+            src/webgpu/WebGpuGammaProcessCompetition.cc
     )
 
     target_include_directories(g4wgpu_core
@@ -383,6 +384,17 @@ if(G4WGPU_BUILD_TESTING)
         add_test(
             NAME g4wgpu.webgpu_klein_nishina
             COMMAND g4wgpu_webgpu_klein_nishina_test
+        )
+
+        add_executable(g4wgpu_webgpu_gamma_process_competition_test
+            tests/integration/test_webgpu_gamma_process_competition.cc
+        )
+        target_link_libraries(g4wgpu_webgpu_gamma_process_competition_test
+            PRIVATE g4wgpu::core)
+
+        add_test(
+            NAME g4wgpu.webgpu_gamma_process_competition
+            COMMAND g4wgpu_webgpu_gamma_process_competition_test
         )
     endif()
 endif()
