@@ -18,9 +18,7 @@
 #include "G4VPhysicalVolume.hh"
 #include "G4VProcess.hh"
 
-#include "g4wgpu/MaterialInteraction.hh"
-#include "g4wgpu/PairProductionCrossSection.hh"
-#include "g4wgpu/PhotoelectricCrossSection.hh"
+#include "g4wgpu/PortableGammaCrossSections.hh"
 #include "g4wgpu/geant4/MaterialConversion.hh"
 #include "g4wgpu/geant4/PhotoelectricSandiaConversion.hh"
 #include "g4wgpu/geant4/TrackBatchConversion.hh"
@@ -257,17 +255,10 @@ void G4WgpuTrackingManager::flush_buffer() {
                 *material,
                 energy_mev);
 
-        cross_sections.compton_per_mm =
-            compton_macroscopic_cross_section_per_mm(
+        cross_sections =
+            portable_gamma_process_cross_sections(
                 material_view,
-                energy_mev);
-        cross_sections.photoelectric_per_mm =
-            photoelectric_macroscopic_cross_section_per_mm(
                 photoelectric_segment,
-                energy_mev);
-        cross_sections.pair_production_per_mm =
-            pair_production_macroscopic_cross_section_per_mm(
-                material_view,
                 energy_mev);
       }
 
