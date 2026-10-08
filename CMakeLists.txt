@@ -20,6 +20,7 @@ add_library(g4wgpu_core
     src/core/BatchOps.cc
     src/core/TrackingPolicy.cc
     src/physics/KleinNishina.cc
+    src/physics/ComptonKinematics.cc
     src/physics/ComptonCrossSection.cc
     src/physics/MaterialInteraction.cc
     src/physics/GammaProcessCompetition.cc
@@ -286,6 +287,17 @@ if(G4WGPU_BUILD_TESTING)
     add_test(
         NAME g4wgpu.klein_nishina
         COMMAND g4wgpu_klein_nishina_test
+    )
+
+    add_executable(g4wgpu_compton_kinematics_test
+        tests/numerical/test_compton_kinematics.cc
+    )
+    target_link_libraries(g4wgpu_compton_kinematics_test
+        PRIVATE g4wgpu::core)
+
+    add_test(
+        NAME g4wgpu.compton_kinematics
+        COMMAND g4wgpu_compton_kinematics_test
     )
 
     add_executable(g4wgpu_compton_cross_section_test
