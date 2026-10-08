@@ -126,6 +126,7 @@ void G4WgpuTrackingManager::HandOverOneTrack(
         "G4WgpuTrackingManager received a null track");
   }
 
+  std::cerr << "g4wgpu-shadow-flow:handover\n";
   if (!is_gpu_candidate(*track)) {
     process_with_default_tracking(track);
     return;
@@ -157,6 +158,7 @@ TrackBatch G4WgpuTrackingManager::make_batch(
 }
 
 void G4WgpuTrackingManager::flush_buffer() {
+  std::cerr << "g4wgpu-shadow-flow:flush-start\n";
   if (buffered_tracks_.empty()) {
     last_flushed_batch_.resize(0);
     last_shadow_samples_.clear();
@@ -165,8 +167,11 @@ void G4WgpuTrackingManager::flush_buffer() {
     return;
   }
 
+  std::cerr << "g4wgpu-shadow-flow:before-batch\n";
   last_flushed_batch_ = make_batch(buffered_tracks_);
+  std::cerr << "g4wgpu-shadow-flow:after-batch\n";
   last_flushed_batch_.validate();
+  std::cerr << "g4wgpu-shadow-flow:after-validate\n";
   last_flushed_batch_size_ =
       last_flushed_batch_.size();
 
@@ -178,7 +183,9 @@ void G4WgpuTrackingManager::flush_buffer() {
         last_flushed_batch_.size());
 
     for (std::size_t i = 0; i < last_flushed_batch_.size(); ++i) {
+      std::cerr << "g4wgpu-shadow-flow:before-material\n";
       const auto* material = buffered_tracks_[i]->GetMaterial();
+      std::cerr << "g4wgpu-shadow-flow:after-material\n";
       if (material == nullptr) {
         throw std::runtime_error(
             "shadow process competition requires a Geant4 material");
