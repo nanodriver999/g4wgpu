@@ -1,5 +1,4 @@
 #include "g4wgpu/PhotoelectricCrossSection.hh"
-#include "g4wgpu/geant4/Geant4GammaCrossSections.hh"
 #include "g4wgpu/geant4/PhotoelectricSandiaConversion.hh"
 
 #include <algorithm>
@@ -13,6 +12,7 @@
 #include "G4Gamma.hh"
 #include "G4LogicalVolume.hh"
 #include "G4NistManager.hh"
+#include "G4PEEffectFluoModel.hh"
 #include "G4PVPlacement.hh"
 #include "G4ParticleGun.hh"
 #include "G4RunManager.hh"
@@ -119,10 +119,23 @@ int main() {
       10.0,
   };
 
+  auto* nist = G4NistManager::Instance();
+  for (const char* name : material_names) {
+    if (nist->FindOrBuildMaterial(name) == nullptr) {
+      std::cerr << "failed to prebuild material " << name << '\n';
+      delete run_manager;
+      return EXIT_FAILURE;
+    }
+  }
+
+  G4PEEffectFluoModel reference_model;
+  G4DataVector cuts;
+  reference_model.Initialise(
+      G4Gamma::GammaDefinition(), cuts);
+
   for (const char* name : material_names) {
     const auto* material =
-        G4NistManager::Instance()
-            ->FindOrBuildMaterial(name);
+        nist->FindOrBuildMaterial(name);
     if (material == nullptr) {
       std::cerr << "failed to build material " << name << '\n';
       delete run_manager;
@@ -137,9 +150,13 @@ int main() {
           g4wgpu::photoelectric_macroscopic_cross_section_per_mm(
               segment, energy_mev);
       const double geant4 =
-          g4wgpu::geant4_gamma_process_cross_sections(
-              *material, energy_mev)
-              .photoelectric_per_mm;
+          reference_model.CrossSectionPerVolume(
+              material,
+              G4Gamma::GammaDefinition(),
+              energy_mev * CLHEP::MeV,
+              0.0,
+              energy_mev * CLHEP::MeV) *
+          CLHEP::mm;
 
       if (!close_relative(portable, geant4)) {
         std::cerr
