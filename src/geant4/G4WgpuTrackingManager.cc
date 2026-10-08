@@ -1,6 +1,7 @@
 #include "g4wgpu/geant4/G4WgpuTrackingManager.hh"
 
 #include <cstdint>
+#include <iostream>
 #include <stdexcept>
 
 #include "G4Event.hh"
@@ -191,26 +192,32 @@ void G4WgpuTrackingManager::flush_buffer() {
 
       const double energy_mev =
           last_flushed_batch_.kinetic_energy[i];
+      std::cerr << "g4wgpu-shadow-xs:A\n";
       const auto material_view =
           make_material_view_from_geant4(*material);
+      std::cerr << "g4wgpu-shadow-xs:B\n";
       const auto photoelectric_segment =
           make_photoelectric_sandia_segment_from_geant4(
               *material,
               energy_mev);
+      std::cerr << "g4wgpu-shadow-xs:C\n";
 
       GammaProcessCrossSections cross_sections;
       cross_sections.compton_per_mm =
           compton_macroscopic_cross_section_per_mm(
               material_view,
               energy_mev);
+      std::cerr << "g4wgpu-shadow-xs:D\n";
       cross_sections.photoelectric_per_mm =
           photoelectric_macroscopic_cross_section_per_mm(
               photoelectric_segment,
               energy_mev);
+      std::cerr << "g4wgpu-shadow-xs:E\n";
       cross_sections.pair_production_per_mm =
           pair_production_macroscopic_cross_section_per_mm(
               material_view,
               energy_mev);
+      std::cerr << "g4wgpu-shadow-xs:F\n";
 
       last_shadow_process_competition_.push_back(
           sample_gamma_process_competition(
