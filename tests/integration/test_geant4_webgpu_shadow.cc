@@ -96,12 +96,15 @@ int main() {
       tracking_manager.last_shadow_process_competition();
   const auto& final_states =
       tracking_manager.last_shadow_compton_final_states();
+  const auto& transport =
+      tracking_manager.last_shadow_transport_decisions();
 
   if (tracking_manager.pending_track_count() != 0u ||
       batch.size() != 1u ||
       shadow.size() != 1u ||
       competition.size() != 1u ||
-      final_states.size() != 1u) {
+      final_states.size() != 1u ||
+      transport.size() != 1u) {
     std::cerr << "Geant4 -> WebGPU shadow pipeline did not complete\n";
     delete run_manager;
     return EXIT_FAILURE;
@@ -117,7 +120,9 @@ int main() {
   }
 
   const bool selected_compton =
-      competition[0].process == g4wgpu::GammaProcess::compton;
+      competition[0].process == g4wgpu::GammaProcess::compton &&
+      transport[0].limiter ==
+          g4wgpu::TransportLimiter::interaction;
 
   if (shadow[0].accepted != selected_compton ||
       final_states[0].has_value() != selected_compton) {
