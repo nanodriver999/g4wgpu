@@ -130,11 +130,14 @@ int main() {
       tracking_manager.last_shadow_process_competition();
   const auto& final_states =
       tracking_manager.last_shadow_compton_final_states();
+  const auto& transport =
+      tracking_manager.last_shadow_transport_decisions();
 
   if (!tracking_manager.shadow_physics_enabled() ||
       shadow.size() != 1u ||
       competition.size() != 1u ||
-      final_states.size() != 1u) {
+      final_states.size() != 1u ||
+      transport.size() != 1u) {
     std::cerr << "shadow physics sampling did not execute correctly\n";
     delete run_manager;
     return EXIT_FAILURE;
@@ -149,8 +152,17 @@ int main() {
     return EXIT_FAILURE;
   }
 
+  if (!(transport[0].step_distance_mm >= 0.0) ||
+      !std::isfinite(transport[0].boundary_distance_mm)) {
+    std::cerr << "shadow transport limiter decision is invalid\n";
+    delete run_manager;
+    return EXIT_FAILURE;
+  }
+
   const bool selected_compton =
-      competition[0].process == g4wgpu::GammaProcess::compton;
+      competition[0].process == g4wgpu::GammaProcess::compton &&
+      transport[0].limiter ==
+          g4wgpu::TransportLimiter::interaction;
 
   if (shadow[0].accepted != selected_compton ||
       final_states[0].has_value() != selected_compton) {
