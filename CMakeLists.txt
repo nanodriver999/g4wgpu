@@ -27,6 +27,7 @@ add_library(g4wgpu_core
     src/physics/PhotoelectricCrossSection.cc
     src/physics/PairProductionCrossSection.cc
     src/physics/PortableGammaCrossSections.cc
+    src/physics/TransportDecision.cc
     src/cpu/CpuBackend.cc
 )
 
@@ -118,6 +119,7 @@ if(G4WGPU_ENABLE_GEANT4)
         src/geant4/MaterialConversion.cc
         src/geant4/Geant4GammaCrossSections.cc
         src/geant4/PhotoelectricSandiaConversion.cc
+        src/geant4/GeometryBoundaryDistance.cc
     )
     add_library(g4wgpu::geant4 ALIAS g4wgpu_geant4)
 
@@ -238,6 +240,20 @@ if(G4WGPU_ENABLE_GEANT4)
         add_test(
             NAME g4wgpu.geant4_pair_production_cross_section
             COMMAND g4wgpu_geant4_pair_production_cross_section_test
+        )
+
+        add_executable(g4wgpu_geant4_boundary_distance_test
+            tests/integration/test_geant4_boundary_distance.cc
+        )
+        target_link_libraries(g4wgpu_geant4_boundary_distance_test
+            PRIVATE
+                g4wgpu::geant4
+                ${Geant4_LIBRARIES}
+        )
+
+        add_test(
+            NAME g4wgpu.geant4_boundary_distance
+            COMMAND g4wgpu_geant4_boundary_distance_test
         )
 
         if(G4WGPU_ENABLE_WEBGPU AND G4WGPU_RUN_GPU_TESTS)
@@ -364,6 +380,17 @@ if(G4WGPU_BUILD_TESTING)
     add_test(
         NAME g4wgpu.portable_gamma_cross_sections
         COMMAND g4wgpu_portable_gamma_cross_sections_test
+    )
+
+    add_executable(g4wgpu_transport_decision_test
+        tests/numerical/test_transport_decision.cc
+    )
+    target_link_libraries(g4wgpu_transport_decision_test
+        PRIVATE g4wgpu::core)
+
+    add_test(
+        NAME g4wgpu.transport_decision
+        COMMAND g4wgpu_transport_decision_test
     )
 
     add_executable(g4wgpu_tracking_policy_test
