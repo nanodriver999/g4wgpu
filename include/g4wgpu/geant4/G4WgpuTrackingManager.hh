@@ -11,6 +11,7 @@
 #include "g4wgpu/KleinNishina.hh"
 #include "g4wgpu/PhysicsBackend.hh"
 #include "g4wgpu/TrackBatch.hh"
+#include "g4wgpu/TransportDecision.hh"
 #include "g4wgpu/TrackingPolicy.hh"
 
 class G4ParticleDefinition;
@@ -68,6 +69,11 @@ class G4WgpuTrackingManager final : public G4VTrackingManager {
     return last_shadow_compton_final_states_;
   }
 
+  [[nodiscard]] const std::vector<TransportDecision>&
+  last_shadow_transport_decisions() const noexcept {
+    return last_shadow_transport_decisions_;
+  }
+
   [[nodiscard]] bool shadow_physics_enabled() const noexcept {
     return shadow_physics_backend_ != nullptr;
   }
@@ -87,6 +93,7 @@ class G4WgpuTrackingManager final : public G4VTrackingManager {
   std::vector<GammaInteractionSample> last_shadow_process_competition_;
   std::vector<std::optional<ComptonFinalState>>
       last_shadow_compton_final_states_;
+  std::vector<TransportDecision> last_shadow_transport_decisions_;
   std::size_t last_flushed_batch_size_ = 0;
 };
 

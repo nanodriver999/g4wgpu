@@ -19,6 +19,7 @@
 #include "G4VProcess.hh"
 
 #include "g4wgpu/PortableGammaCrossSections.hh"
+#include "g4wgpu/geant4/GeometryBoundaryDistance.hh"
 #include "g4wgpu/geant4/MaterialConversion.hh"
 #include "g4wgpu/geant4/PhotoelectricSandiaConversion.hh"
 #include "g4wgpu/geant4/TrackBatchConversion.hh"
@@ -213,6 +214,7 @@ void G4WgpuTrackingManager::flush_buffer() {
     last_shadow_samples_.clear();
     last_shadow_process_competition_.clear();
     last_shadow_compton_final_states_.clear();
+    last_shadow_transport_decisions_.clear();
     last_flushed_batch_size_ = 0;
     return;
   }
@@ -225,6 +227,7 @@ void G4WgpuTrackingManager::flush_buffer() {
   last_shadow_samples_.clear();
   last_shadow_process_competition_.clear();
   last_shadow_compton_final_states_.clear();
+  last_shadow_transport_decisions_.clear();
   if (shadow_physics_backend_ != nullptr) {
     std::vector<RngAddress> competition_rng(
         last_flushed_batch_.size());
@@ -276,6 +279,18 @@ void G4WgpuTrackingManager::flush_buffer() {
           "shadow process competition returned an unexpected sample count");
     }
 
+    last_shadow_transport_decisions_.reserve(
+        last_flushed_batch_.size());
+
+    for (std::size_t i = 0; i < last_flushed_batch_.size(); ++i) {
+      const double boundary_distance_mm =
+          geant4_boundary_distance_mm(*buffered_tracks_[i]);
+      last_shadow_transport_decisions_.push_back(
+          choose_transport_limiter(
+              last_shadow_process_competition_[i].distance_mm,
+              boundary_distance_mm));
+    }
+
     // Only tracks for which process competition selected Compton should run
     // the Klein-Nishina final-state sampler. Continue from the RNG counters
     // consumed by process competition so the two stages do not reuse draws.
@@ -288,7 +303,9 @@ void G4WgpuTrackingManager::flush_buffer() {
 
     for (std::size_t i = 0; i < last_flushed_batch_.size(); ++i) {
       if (last_shadow_process_competition_[i].process ==
-          GammaProcess::compton) {
+              GammaProcess::compton &&
+          last_shadow_transport_decisions_[i].limiter ==
+              TransportLimiter::interaction) {
         compton_indices.push_back(i);
         compton_energies.push_back(
             last_flushed_batch_.kinetic_energy[i]);
