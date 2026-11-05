@@ -16,6 +16,7 @@
 #include "G4SystemOfUnits.hh"
 #include "G4Track.hh"
 #include "G4TrackStatus.hh"
+#include "G4TrackVector.hh"
 #include "G4TrackingManager.hh"
 #include "G4TransportationManager.hh"
 #include "G4VPhysicalVolume.hh"
