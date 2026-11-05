@@ -3,16 +3,20 @@
 #include <cstdint>
 #include <stdexcept>
 
+#include "G4DynamicParticle.hh"
+#include "G4Electron.hh"
 #include "G4Event.hh"
 #include "G4EventManager.hh"
 #include "G4Exception.hh"
 #include "G4Gamma.hh"
+#include "G4PhysicalConstants.hh"
 #include "G4ParticleDefinition.hh"
 #include "G4ProcessManager.hh"
 #include "G4StackManager.hh"
 #include "G4SystemOfUnits.hh"
 #include "G4Track.hh"
 #include "G4TrackStatus.hh"
+#include "G4TrackVector.hh"
 #include "G4TrackingManager.hh"
 #include "G4TransportationManager.hh"
 #include "G4VPhysicalVolume.hh"
@@ -361,9 +365,111 @@ void G4WgpuTrackingManager::flush_buffer() {
   buffered_tracks_.clear();
   buffered_tracks_.reserve(policy_.batch_capacity);
 
-  for (auto* track : tracks) {
-    process_with_default_tracking(track);
+  for (std::size_t i = 0; i < tracks.size(); ++i) {
+    auto* track = tracks[i];
+    const bool can_promote =
+        policy_.enable_authoritative_compton &&
+        i < last_shadow_process_competition_.size() &&
+        i < last_shadow_transport_decisions_.size() &&
+        i < last_shadow_compton_final_states_.size() &&
+        last_shadow_process_competition_[i].process ==
+            GammaProcess::compton &&
+        last_shadow_transport_decisions_[i].limiter ==
+            TransportLimiter::interaction &&
+        last_shadow_compton_final_states_[i].has_value();
+
+    if (can_promote) {
+      promote_authoritative_compton(
+          track,
+          last_shadow_transport_decisions_[i],
+          *last_shadow_compton_final_states_[i]);
+    } else {
+      process_with_default_tracking(track);
+    }
   }
+}
+
+void G4WgpuTrackingManager::promote_authoritative_compton(
+    G4Track* track,
+    const TransportDecision& transport,
+    const ComptonFinalState& final_state) {
+  if (track == nullptr) {
+    throw std::invalid_argument(
+        "authoritative Compton promotion received a null track");
+  }
+  if (transport.limiter != TransportLimiter::interaction ||
+      !(transport.step_distance_mm >= 0.0)) {
+    throw std::invalid_argument(
+        "authoritative Compton promotion requires an interaction-limited step");
+  }
+
+  auto* event_manager = G4EventManager::GetEventManager();
+  if (event_manager == nullptr) {
+    throw std::runtime_error(
+        "G4EventManager is not available for authoritative Compton promotion");
+  }
+
+  auto* stack_manager = event_manager->GetStackManager();
+  if (stack_manager == nullptr) {
+    throw std::runtime_error(
+        "G4StackManager is not available for authoritative Compton promotion");
+  }
+
+  const auto incident_direction =
+      track->GetMomentumDirection();
+  const G4double distance =
+      transport.step_distance_mm * CLHEP::mm;
+  const G4ThreeVector interaction_position =
+      track->GetPosition() +
+      incident_direction * distance;
+  const G4double delta_time =
+      distance / CLHEP::c_light;
+  const G4double interaction_global_time =
+      track->GetGlobalTime() + delta_time;
+  const G4double interaction_local_time =
+      track->GetLocalTime() + delta_time;
+
+  track->SetPosition(interaction_position);
+  track->SetGlobalTime(interaction_global_time);
+  track->SetLocalTime(interaction_local_time);
+  track->AddTrackLength(distance);
+  track->SetStepLength(distance);
+  track->SetKineticEnergy(
+      final_state.scattered_gamma_energy_mev *
+      CLHEP::MeV);
+  track->SetMomentumDirection(
+      G4ThreeVector(
+          final_state.scattered_gamma_direction.x,
+          final_state.scattered_gamma_direction.y,
+          final_state.scattered_gamma_direction.z));
+  track->SetTrackStatus(fAlive);
+
+  auto* electron_particle =
+      new G4DynamicParticle(
+          G4Electron::ElectronDefinition(),
+          G4ThreeVector(
+              final_state.recoil_electron_direction.x,
+              final_state.recoil_electron_direction.y,
+              final_state.recoil_electron_direction.z),
+          final_state.recoil_electron_kinetic_energy_mev *
+              CLHEP::MeV);
+  auto* electron =
+      new G4Track(
+          electron_particle,
+          interaction_global_time,
+          interaction_position);
+  electron->SetParentID(track->GetTrackID());
+  electron->SetWeight(track->GetWeight());
+
+  // Preserve the gamma track identity while assigning a fresh ID to the new
+  // recoil electron through the normal event-manager secondary path.
+  stack_manager->PushOneTrack(track);
+
+  G4TrackVector secondaries;
+  secondaries.push_back(electron);
+  event_manager->StackTracks(&secondaries);
+
+  ++authoritative_compton_promotions_;
 }
 
 void G4WgpuTrackingManager::process_with_default_tracking(

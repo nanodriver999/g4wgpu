@@ -78,10 +78,18 @@ class G4WgpuTrackingManager final : public G4VTrackingManager {
     return shadow_physics_backend_ != nullptr;
   }
 
+  [[nodiscard]] std::size_t authoritative_compton_promotions() const noexcept {
+    return authoritative_compton_promotions_;
+  }
+
  private:
   bool is_gpu_candidate(const G4Track& track) const;
   void flush_buffer();
   void process_with_default_tracking(G4Track* track);
+  void promote_authoritative_compton(
+      G4Track* track,
+      const TransportDecision& transport,
+      const ComptonFinalState& final_state);
   TrackBatch make_batch(
       const std::vector<G4Track*>& tracks) const;
 
@@ -95,6 +103,7 @@ class G4WgpuTrackingManager final : public G4VTrackingManager {
       last_shadow_compton_final_states_;
   std::vector<TransportDecision> last_shadow_transport_decisions_;
   std::size_t last_flushed_batch_size_ = 0;
+  std::size_t authoritative_compton_promotions_ = 0;
 };
 
 }  // namespace g4wgpu
