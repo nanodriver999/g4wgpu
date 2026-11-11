@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   cpu:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Configure CPU build
@@ -26,7 +26,7 @@ jobs:
         run: ctest --test-dir build --output-on-failure
 
   webgpu-compile-link:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -69,7 +69,7 @@ jobs:
 
 
   geant4-compile-link:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
@@ -148,7 +148,7 @@ jobs:
     needs:
       - webgpu-compile-link
       - geant4-compile-link
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
 
