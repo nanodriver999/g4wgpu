@@ -500,6 +500,17 @@ if(G4WGPU_BUILD_TESTING)
             COMMAND g4wgpu_webgpu_backend_test
         )
 
+        add_executable(g4wgpu_webgpu_orb_entry_test
+            tests/integration/test_webgpu_orb_entry.cc
+        )
+        target_link_libraries(g4wgpu_webgpu_orb_entry_test
+            PRIVATE g4wgpu::core
+        )
+        add_test(
+            NAME g4wgpu.webgpu_orb_entry
+            COMMAND g4wgpu_webgpu_orb_entry_test
+        )
+
         add_executable(g4wgpu_webgpu_orb_safety_test
             tests/integration/test_webgpu_orb_safety.cc
         )

@@ -56,6 +56,11 @@ class WebGpuBackend final : public ComputeBackend, public PhysicsBackend {
       const PortableOrb& orb,
       const std::vector<OrbVector3>& positions);
 
+  // Standalone, non-authoritative full-sphere ray entry distances in mm.
+  // A miss is positive infinity; GPU f32 rounding is tested vs CPU f64.
+  std::vector<double> orb_distance_to_in_batch(
+      const PortableOrb& orb, const std::vector<OrbRay>& rays);
+
   std::vector<KleinNishinaSample> sample_klein_nishina_batch(
       const std::vector<double>& incident_gamma_energy_mev,
       std::vector<RngAddress>& rng,
