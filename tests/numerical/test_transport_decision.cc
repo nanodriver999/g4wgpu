@@ -2,8 +2,10 @@
 
 #include <cmath>
 #include <cstdlib>
+#include <initializer_list>
 #include <iostream>
 #include <limits>
+#include <stdexcept>
 
 int main() {
   {
@@ -47,6 +49,44 @@ int main() {
         !std::isinf(d.step_distance_mm)) {
       std::cerr << "double-infinity case should have no limiter\n";
       return EXIT_FAILURE;
+    }
+  }
+
+  {
+    // One infinite distance must not mask a finite limiting step.
+    const double inf = std::numeric_limits<double>::infinity();
+    const auto physics = g4wgpu::choose_transport_limiter(2.0, inf);
+    const auto geometry = g4wgpu::choose_transport_limiter(inf, 4.0);
+    if (physics.limiter != g4wgpu::TransportLimiter::interaction ||
+        physics.step_distance_mm != 2.0 ||
+        geometry.limiter != g4wgpu::TransportLimiter::geometry_boundary ||
+        geometry.step_distance_mm != 4.0) {
+      std::cerr << "finite distance must win over infinity\n";
+      return EXIT_FAILURE;
+    }
+  }
+
+  {
+    // Invalid distances must fail before a step is handed to transport.
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    const double inf = std::numeric_limits<double>::infinity();
+    for (const double invalid : {nan, -inf, -1.0}) {
+      for (const bool invalid_interaction : {false, true}) {
+        bool threw = false;
+        try {
+          if (invalid_interaction) {
+            (void)g4wgpu::choose_transport_limiter(invalid, 1.0);
+          } else {
+            (void)g4wgpu::choose_transport_limiter(1.0, invalid);
+          }
+        } catch (const std::invalid_argument&) {
+          threw = true;
+        }
+        if (!threw) {
+          std::cerr << "invalid transport distance was accepted\n";
+          return EXIT_FAILURE;
+        }
+      }
     }
   }
 
