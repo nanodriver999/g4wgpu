@@ -2,8 +2,11 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -111,12 +114,14 @@ void on_buffer_map(WGPUMapAsyncStatus status, WGPUStringView message,
   state->done = true;
 }
 
-WGPUShaderModule create_shader_module(WGPUDevice device, const char* source) {
+WGPUShaderModule create_shader_module(
+    WGPUDevice device, const char* source,
+    const char* label = "g4wgpu_axpy_shader") {
   WGPUShaderSourceWGSL wgsl = WGPU_SHADER_SOURCE_WGSL_INIT;
   wgsl.code = string_view(source);
 
   WGPUShaderModuleDescriptor descriptor = WGPU_SHADER_MODULE_DESCRIPTOR_INIT;
-  descriptor.label = string_view("g4wgpu_axpy_shader");
+  descriptor.label = string_view(label);
   descriptor.nextInChain = reinterpret_cast<WGPUChainedStruct*>(&wgsl);
 
   return wgpuDeviceCreateShaderModule(device, &descriptor);
@@ -170,7 +175,105 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
 }
 )WGSL";
 
+
+struct GpuBoxRay {
+  float px;
+  float py;
+  float pz;
+  float pad0;
+  float dx;
+  float dy;
+  float dz;
+  float pad1;
+};
+static_assert(sizeof(GpuBoxRay) == 32);
+
+struct GpuBoxParams {
+  float half_x;
+  float half_y;
+  float half_z;
+  std::uint32_t count;
+};
+static_assert(sizeof(GpuBoxParams) == 16);
+
+// A read-only standalone Box DistanceToIn experiment. Geant4 navigation
+// remains authoritative; invalid f32 inputs are rejected in the C++ adapter.
+constexpr const char* kBoxEntryShader = R"WGSL(
+struct Ray {
+  px: f32,
+  py: f32,
+  pz: f32,
+  pad0: f32,
+  dx: f32,
+  dy: f32,
+  dz: f32,
+  pad1: f32,
+}
+
+struct Params {
+  half_x: f32,
+  half_y: f32,
+  half_z: f32,
+  count: u32,
+}
+
+@group(0) @binding(0)
+var<storage, read> rays: array<Ray>;
+
+@group(0) @binding(1)
+var<storage, read_write> distances: array<f32>;
+
+@group(0) @binding(2)
+var<uniform> params: Params;
+
+@compute @workgroup_size(128)
+fn main(@builtin(global_invocation_id) id: vec3<u32>) {
+  let index = id.x;
+  if (index >= params.count) {
+    return;
+  }
+
+  let ray = rays[index];
+  let p = vec3<f32>(ray.px, ray.py, ray.pz);
+  let d = vec3<f32>(ray.dx, ray.dy, ray.dz);
+  let half = vec3<f32>(
+      params.half_x, params.half_y, params.half_z);
+  let infinity = bitcast<f32>(0x7f800000u);
+
+  var entry = -infinity;
+  var exit = infinity;
+  for (var axis = 0u; axis < 3u; axis = axis + 1u) {
+    let origin = p[axis];
+    let direction = d[axis];
+    let extent = half[axis];
+    if (direction == 0.0) {
+      if (origin < -extent || origin > extent) {
+        distances[index] = infinity;
+        return;
+      }
+    } else {
+      let a = (-extent - origin) / direction;
+      let b = (extent - origin) / direction;
+      entry = max(entry, min(a, b));
+      exit = min(exit, max(a, b));
+      if (entry > exit) {
+        distances[index] = infinity;
+        return;
+      }
+    }
+  }
+
+  if (exit < 0.0) {
+    distances[index] = infinity;
+  } else {
+    distances[index] = max(0.0, entry);
+  }
+}
+)WGSL";
+
 struct DispatchResources {
+  WGPUShaderModule shader = nullptr;
+  WGPUComputePipeline pipeline = nullptr;
   WGPUBuffer x_buffer = nullptr;
   WGPUBuffer y_buffer = nullptr;
   WGPUBuffer params_buffer = nullptr;
@@ -204,6 +307,12 @@ struct DispatchResources {
     }
     if (x_buffer != nullptr) {
       wgpuBufferRelease(x_buffer);
+    }
+    if (pipeline != nullptr) {
+      wgpuComputePipelineRelease(pipeline);
+    }
+    if (shader != nullptr) {
+      wgpuShaderModuleRelease(shader);
     }
   }
 };
@@ -480,6 +589,253 @@ class WebGpuBackend::Impl {
     wgpuBufferUnmap(resources.readback_buffer);
   }
 
+
+  std::vector<double> box_distance_to_in_batch(
+      const AxisAlignedBox& box,
+      const std::vector<BoxRay>& rays) {
+    const auto finite_f32 = [](double value) -> float {
+      const float converted = static_cast<float>(value);
+      if (!std::isfinite(value) || !std::isfinite(converted)) {
+        throw std::invalid_argument(
+            "Box GPU input must be representable by finite f32");
+      }
+      return converted;
+    };
+
+    const GpuBoxParams parameters{
+        finite_f32(box.half_lengths_mm.x),
+        finite_f32(box.half_lengths_mm.y),
+        finite_f32(box.half_lengths_mm.z),
+        static_cast<std::uint32_t>(rays.size())};
+    if (!(parameters.half_x > 0.0f) ||
+        !(parameters.half_y > 0.0f) ||
+        !(parameters.half_z > 0.0f)) {
+      throw std::invalid_argument(
+          "Box GPU half lengths must be positive in f32");
+    }
+    constexpr std::size_t kMaxRays = 65535u * 128u;
+    if (rays.size() > kMaxRays) {
+      throw std::overflow_error(
+          "Box GPU batch exceeds portable workgroup dispatch limit");
+    }
+    if (rays.empty()) {
+      return {};
+    }
+
+    std::vector<GpuBoxRay> inputs;
+    inputs.reserve(rays.size());
+    for (const BoxRay& ray : rays) {
+      const float px = finite_f32(ray.position_mm.x);
+      const float py = finite_f32(ray.position_mm.y);
+      const float pz = finite_f32(ray.position_mm.z);
+      const double direction_norm =
+          std::hypot(
+              ray.direction.x, ray.direction.y, ray.direction.z);
+      if (!(direction_norm > 0.0) ||
+          !std::isfinite(direction_norm)) {
+        throw std::invalid_argument(
+            "Box GPU direction must be finite and nonzero");
+      }
+      const float dx =
+          finite_f32(ray.direction.x / direction_norm);
+      const float dy =
+          finite_f32(ray.direction.y / direction_norm);
+      const float dz =
+          finite_f32(ray.direction.z / direction_norm);
+      inputs.push_back(GpuBoxRay{
+          px, py, pz, 0.0f,
+          dx, dy, dz, 0.0f});
+    }
+
+    const std::uint64_t input_bytes =
+        static_cast<std::uint64_t>(
+            inputs.size() * sizeof(GpuBoxRay));
+    const std::uint64_t output_bytes =
+        static_cast<std::uint64_t>(
+            inputs.size() * sizeof(float));
+
+    DispatchResources resources;
+    resources.shader = create_shader_module(
+        device, kBoxEntryShader, "g4wgpu_box_entry_shader");
+    if (resources.shader == nullptr) {
+      throw std::runtime_error(
+          "failed to create Box entry shader module");
+    }
+
+    WGPUComputeState compute = WGPU_COMPUTE_STATE_INIT;
+    compute.module = resources.shader;
+    compute.entryPoint = string_view("main");
+    WGPUComputePipelineDescriptor pipeline_descriptor =
+        WGPU_COMPUTE_PIPELINE_DESCRIPTOR_INIT;
+    pipeline_descriptor.label =
+        string_view("g4wgpu_box_entry_pipeline");
+    pipeline_descriptor.compute = compute;
+    resources.pipeline =
+        wgpuDeviceCreateComputePipeline(
+            device, &pipeline_descriptor);
+    if (resources.pipeline == nullptr) {
+      throw std::runtime_error(
+          "failed to create Box entry compute pipeline");
+    }
+
+    resources.x_buffer = create_buffer(
+        device, "g4wgpu_box_rays", input_bytes,
+        WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    resources.y_buffer = create_buffer(
+        device, "g4wgpu_box_distances", output_bytes,
+        WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
+    resources.params_buffer = create_buffer(
+        device, "g4wgpu_box_params", sizeof(GpuBoxParams),
+        WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst);
+    resources.readback_buffer = create_buffer(
+        device, "g4wgpu_box_readback", output_bytes,
+        WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
+    if (resources.x_buffer == nullptr ||
+        resources.y_buffer == nullptr ||
+        resources.params_buffer == nullptr ||
+        resources.readback_buffer == nullptr) {
+      throw std::runtime_error(
+          "failed to create Box entry buffers");
+    }
+
+    resources.layout = wgpuComputePipelineGetBindGroupLayout(
+        resources.pipeline, 0);
+    if (resources.layout == nullptr) {
+      throw std::runtime_error(
+          "failed to get Box entry bind group layout");
+    }
+
+    WGPUBindGroupEntry entries[3] = {
+        WGPU_BIND_GROUP_ENTRY_INIT,
+        WGPU_BIND_GROUP_ENTRY_INIT,
+        WGPU_BIND_GROUP_ENTRY_INIT};
+    entries[0].binding = 0;
+    entries[0].buffer = resources.x_buffer;
+    entries[0].size = input_bytes;
+    entries[1].binding = 1;
+    entries[1].buffer = resources.y_buffer;
+    entries[1].size = output_bytes;
+    entries[2].binding = 2;
+    entries[2].buffer = resources.params_buffer;
+    entries[2].size = sizeof(GpuBoxParams);
+
+    WGPUBindGroupDescriptor bind_group_descriptor =
+        WGPU_BIND_GROUP_DESCRIPTOR_INIT;
+    bind_group_descriptor.label =
+        string_view("g4wgpu_box_entry_bind_group");
+    bind_group_descriptor.layout = resources.layout;
+    bind_group_descriptor.entryCount = 3;
+    bind_group_descriptor.entries = entries;
+    resources.bind_group =
+        wgpuDeviceCreateBindGroup(
+            device, &bind_group_descriptor);
+    if (resources.bind_group == nullptr) {
+      throw std::runtime_error(
+          "failed to create Box entry bind group");
+    }
+
+    wgpuQueueWriteBuffer(
+        queue, resources.x_buffer, 0,
+        inputs.data(), input_bytes);
+    wgpuQueueWriteBuffer(
+        queue, resources.params_buffer, 0,
+        &parameters, sizeof(parameters));
+
+    WGPUCommandEncoderDescriptor encoder_descriptor =
+        WGPU_COMMAND_ENCODER_DESCRIPTOR_INIT;
+    encoder_descriptor.label =
+        string_view("g4wgpu_box_entry_encoder");
+    resources.encoder =
+        wgpuDeviceCreateCommandEncoder(
+            device, &encoder_descriptor);
+    if (resources.encoder == nullptr) {
+      throw std::runtime_error(
+          "failed to create Box entry command encoder");
+    }
+    WGPUComputePassDescriptor pass_descriptor =
+        WGPU_COMPUTE_PASS_DESCRIPTOR_INIT;
+    pass_descriptor.label =
+        string_view("g4wgpu_box_entry_pass");
+    WGPUComputePassEncoder pass =
+        wgpuCommandEncoderBeginComputePass(
+            resources.encoder, &pass_descriptor);
+    if (pass == nullptr) {
+      throw std::runtime_error(
+          "failed to start Box entry pass");
+    }
+
+    wgpuComputePassEncoderSetPipeline(
+        pass, resources.pipeline);
+    wgpuComputePassEncoderSetBindGroup(
+        pass, 0, resources.bind_group, 0, nullptr);
+    const std::uint32_t workgroups =
+        static_cast<std::uint32_t>(
+            (rays.size() + 127u) / 128u);
+    wgpuComputePassEncoderDispatchWorkgroups(
+        pass, workgroups, 1u, 1u);
+    wgpuComputePassEncoderEnd(pass);
+    wgpuComputePassEncoderRelease(pass);
+
+    wgpuCommandEncoderCopyBufferToBuffer(
+        resources.encoder, resources.y_buffer, 0,
+        resources.readback_buffer, 0, output_bytes);
+
+    WGPUCommandBufferDescriptor command_descriptor =
+        WGPU_COMMAND_BUFFER_DESCRIPTOR_INIT;
+    command_descriptor.label =
+        string_view("g4wgpu_box_entry_command");
+    resources.command_buffer =
+        wgpuCommandEncoderFinish(
+            resources.encoder, &command_descriptor);
+    if (resources.command_buffer == nullptr) {
+      throw std::runtime_error(
+          "failed to finish Box entry command buffer");
+    }
+    wgpuQueueSubmit(queue, 1, &resources.command_buffer);
+
+    BufferMapState map_state;
+    WGPUBufferMapCallbackInfo callback =
+        WGPU_BUFFER_MAP_CALLBACK_INFO_INIT;
+    callback.mode = WGPUCallbackMode_AllowProcessEvents;
+    callback.callback = on_buffer_map;
+    callback.userdata1 = &map_state;
+    wgpuBufferMapAsync(
+        resources.readback_buffer, WGPUMapMode_Read,
+        0, output_bytes, callback);
+    wgpuDevicePoll(device, WGPU_TRUE, nullptr);
+    wait_for_callback(
+        instance, map_state, "Box entry readback");
+
+    if (!map_state.success) {
+      throw std::runtime_error(
+          "Box entry readback failed: " + map_state.error);
+    }
+    const void* mapped = wgpuBufferGetConstMappedRange(
+        resources.readback_buffer, 0, output_bytes);
+    if (mapped == nullptr) {
+      wgpuBufferUnmap(resources.readback_buffer);
+      throw std::runtime_error(
+          "Box entry mapped range is null");
+    }
+
+    std::vector<float> output(rays.size());
+    std::memcpy(
+        output.data(), mapped,
+        static_cast<std::size_t>(output_bytes));
+    wgpuBufferUnmap(resources.readback_buffer);
+
+    std::vector<double> distances;
+    distances.reserve(output.size());
+    for (const float value : output) {
+      if (std::isnan(value) || value < 0.0f) {
+        throw std::runtime_error(
+            "Box GPU kernel returned invalid distance");
+      }
+      distances.push_back(static_cast<double>(value));
+    }
+    return distances;
+  }
+
   WGPUInstance instance = nullptr;
   WGPUAdapter adapter = nullptr;
   WGPUDevice device = nullptr;
@@ -522,6 +878,12 @@ void WebGpuBackend::axpy(const double a, const std::vector<double>& x,
   std::transform(
       y_staging.begin(), y_staging.end(), y.begin(),
       [](float value) { return static_cast<double>(value); });
+}
+
+std::vector<double> WebGpuBackend::box_distance_to_in_batch(
+    const AxisAlignedBox& box,
+    const std::vector<BoxRay>& rays) {
+  return impl_->box_distance_to_in_batch(box, rays);
 }
 
 void WebGpuBackend::advance_positions(TrackBatch& tracks, const double dt) {
