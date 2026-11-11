@@ -43,3 +43,20 @@ absolute/relative tolerances and explicit invalid-input regressions. This
 is only a standalone geometry calculation, not navigation authority. Box
 safety, Orb and Tubs WGSL calculations are still separate tasks, as are
 precision stress cases and end-to-end performance measurements.
+
+## Batched Box safety extension
+
+The `box_safety_to_in_batch` and `box_safety_to_out_batch` methods accept
+positions only. They reuse the existing f32-compatible Box ray staging format
+with an ignored fixed direction, and dispatch two new independent WGSL entry
+points. The in-safety shader computes the largest positive excess beyond the
+axis-aligned Box faces; the out-safety shader computes the smallest remaining
+clearance, clamped to zero. Both mirror the existing portable f64 Box CPU
+reference and return distances in millimeters, including zero for points
+inside/outside as appropriate.
+
+The software-Vulkan test checks both kernels against the CPU reference over
+multiple workgroups, including on-face, outside-corner, near-face and invalid
+f32 input cases, with explicit f32 error bounds. This is a standalone numerical
+experiment, not Geant4 navigation authority. Reusing an input buffer for each
+dispatch does not establish GPU residency or an end-to-end speedup.
