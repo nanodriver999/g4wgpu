@@ -78,7 +78,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /tmp/geant4-install
-          key: geant4-${{ runner.os }}-f3d5293d384757b8a228a099898b2b87cfa4023c
+          key: geant4-${{ runner.os }}-ubuntu-24.04-f3d5293d384757b8a228a099898b2b87cfa4023c
 
       - name: Install Geant4 build prerequisites
         if: steps.geant4-cache.outputs.cache-hit != 'true'
@@ -108,7 +108,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: /tmp/geant4-install
-          key: geant4-${{ runner.os }}-f3d5293d384757b8a228a099898b2b87cfa4023c
+          key: geant4-${{ runner.os }}-ubuntu-24.04-f3d5293d384757b8a228a099898b2b87cfa4023c
 
       - name: Install Geant4 runtime datasets
         shell: bash
@@ -156,7 +156,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /tmp/geant4-install
-          key: geant4-${{ runner.os }}-f3d5293d384757b8a228a099898b2b87cfa4023c
+          key: geant4-${{ runner.os }}-ubuntu-24.04-f3d5293d384757b8a228a099898b2b87cfa4023c
           fail-on-cache-miss: true
 
       - name: Install combined runtime prerequisites
