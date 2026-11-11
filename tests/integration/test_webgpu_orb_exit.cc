@@ -75,6 +75,36 @@ int main() {
     }
   }
 
+  // Geometric distance is invariant under positive rescaling of the ray
+  // direction. Exercise the host normalization and f32 staging path with
+  // both sub-unit and large (but finite) direction magnitudes.
+  const std::vector<double> scales{0.125, 0.5, 2.0, 16.0, 1024.0};
+  std::vector<g4wgpu::OrbRay> scaled_rays;
+  for (std::size_t i = 0; i < 32; ++i) {
+    const auto& ray = rays[i];
+    for (double scale : scales) {
+      scaled_rays.push_back({ray.position_mm,
+                             {ray.direction.x * scale,
+                              ray.direction.y * scale,
+                              ray.direction.z * scale}});
+    }
+  }
+  const auto scaled_distances = gpu.orb_distance_to_out_batch(orb, scaled_rays);
+  if (scaled_distances.size() != scaled_rays.size()) {
+    std::cerr << "Scaled Orb exit batch length mismatch\n";
+    return EXIT_FAILURE;
+  }
+  for (std::size_t i = 0; i < scaled_rays.size(); ++i) {
+    const std::size_t original = i / scales.size();
+    const double cpu = g4wgpu::orb_distance_to_out_mm(
+        orb, scaled_rays[i].position_mm, scaled_rays[i].direction);
+    if (!close_distance(cpu, scaled_distances[i]) ||
+        !close_distance(computed[original], scaled_distances[i])) {
+      std::cerr << "Orb exit direction scaling mismatch at " << i << '\n';
+      return EXIT_FAILURE;
+    }
+  }
+
   if (!gpu.orb_distance_to_out_batch(orb, {}).empty()) {
     std::cerr << "Empty Orb exit batch must remain empty\n";
     return EXIT_FAILURE;
