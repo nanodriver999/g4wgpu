@@ -78,6 +78,23 @@ ComptonFinalState make_compton_final_state(
         "Compton sample contains invalid kinematics");
   }
 
+  // Shadow and WebGPU samples may carry f32 roundoff. Reject genuinely
+  // unphysical polar angles before normalizing the reconstructed direction:
+  // normalization alone can hide inconsistent sin/cos pairs.
+  constexpr double kAngleRangeTolerance = 1.0e-5;
+  constexpr double kAngleNormTolerance = 1.0e-4;
+  const double polar_norm2 =
+      sample.cos_theta * sample.cos_theta +
+      sample.sin_theta * sample.sin_theta;
+  if (sample.cos_theta < -1.0 - kAngleRangeTolerance ||
+      sample.cos_theta > 1.0 + kAngleRangeTolerance ||
+      sample.sin_theta < -kAngleRangeTolerance ||
+      sample.sin_theta > 1.0 + kAngleRangeTolerance ||
+      std::fabs(polar_norm2 - 1.0) > kAngleNormTolerance) {
+    throw std::invalid_argument(
+        "Compton sample has inconsistent polar angle components");
+  }
+
   const double energy_residual =
       std::fabs(
           sample.scattered_gamma_energy_mev +
