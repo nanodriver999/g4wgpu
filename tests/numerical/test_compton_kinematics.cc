@@ -207,6 +207,23 @@ int main() {
     if (!must_reject(1.0, incident, invalid, "NaN azimuth")) {
       return EXIT_FAILURE;
     }
+    // Non-finite azimuth must be rejected even when other kinematics are valid.
+    invalid = forward;
+    invalid.phi = inf;
+    if (!must_reject(1.0, incident, invalid, "infinite azimuth")) {
+      return EXIT_FAILURE;
+    }
+    // Both polar components must be finite; NaN comparisons alone are unsafe.
+    invalid = forward;
+    invalid.cos_theta = nan;
+    if (!must_reject(1.0, incident, invalid, "NaN polar cosine")) {
+      return EXIT_FAILURE;
+    }
+    invalid = forward;
+    invalid.sin_theta = inf;
+    if (!must_reject(1.0, incident, invalid, "infinite polar sine")) {
+      return EXIT_FAILURE;
+    }
     invalid = forward;
     invalid.scattered_gamma_energy_mev = 1.1;
     if (!must_reject(1.0, incident, invalid, "scattered energy above input")) {
