@@ -594,10 +594,16 @@ class WebGpuBackend::Impl {
       const AxisAlignedBox& box,
       const std::vector<BoxRay>& rays) {
     const auto finite_f32 = [](double value) -> float {
-      const float converted = static_cast<float>(value);
-      if (!std::isfinite(value) || !std::isfinite(converted)) {
+      if (!std::isfinite(value) ||
+          std::fabs(value) >
+              static_cast<double>(std::numeric_limits<float>::max())) {
         throw std::invalid_argument(
             "Box GPU input must be representable by finite f32");
+      }
+      const float converted = static_cast<float>(value);
+      if (!std::isfinite(converted)) {
+        throw std::invalid_argument(
+            "Box GPU float conversion failed");
       }
       return converted;
     };
