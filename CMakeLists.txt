@@ -443,6 +443,15 @@ if(G4WGPU_BUILD_TESTING)
         COMMAND g4wgpu_transport_decision_test
     )
 
+    add_executable(g4wgpu_geometry_f32_precision_test
+        tests/numerical/test_geometry_f32_precision.cc
+    )
+    target_link_libraries(g4wgpu_geometry_f32_precision_test PRIVATE g4wgpu::core)
+    add_test(
+        NAME g4wgpu.geometry_f32_precision
+        COMMAND g4wgpu_geometry_f32_precision_test
+    )
+
     add_executable(g4wgpu_tubs_geometry_test
         tests/numerical/test_tubs_geometry.cc
     )
