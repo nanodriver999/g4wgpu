@@ -4,6 +4,7 @@
 #include <string_view>
 
 #include "g4wgpu/BoxGeometry.hh"
+#include "g4wgpu/OrbGeometry.hh"
 #include "g4wgpu/ComputeBackend.hh"
 #include "g4wgpu/PhysicsBackend.hh"
 
@@ -45,6 +46,15 @@ class WebGpuBackend final : public ComputeBackend, public PhysicsBackend {
   std::vector<double> box_safety_to_out_batch(
       const AxisAlignedBox& box,
       const std::vector<BoxVector3>& positions);
+
+  // Experimental Orb radial safety kernels. CPU Geant4 navigation remains
+  // authoritative. Results are millimeters with f32 GPU precision.
+  std::vector<double> orb_safety_to_in_batch(
+      const PortableOrb& orb,
+      const std::vector<OrbVector3>& positions);
+  std::vector<double> orb_safety_to_out_batch(
+      const PortableOrb& orb,
+      const std::vector<OrbVector3>& positions);
 
   std::vector<KleinNishinaSample> sample_klein_nishina_batch(
       const std::vector<double>& incident_gamma_energy_mev,
