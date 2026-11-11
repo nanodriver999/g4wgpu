@@ -91,7 +91,7 @@ int main() {
   }
   const auto scaled_distances = gpu.orb_distance_to_out_batch(orb, scaled_rays);
   if (scaled_distances.size() != scaled_rays.size()) {
-    std::cerr << "Scaled Orb exit batch length mismatch\\n";
+    std::cerr << "Scaled Orb exit batch length mismatch\n";
     return EXIT_FAILURE;
   }
   for (std::size_t i = 0; i < scaled_rays.size(); ++i) {
@@ -100,7 +100,7 @@ int main() {
         orb, scaled_rays[i].position_mm, scaled_rays[i].direction);
     if (!close_distance(cpu, scaled_distances[i]) ||
         !close_distance(computed[original], scaled_distances[i])) {
-      std::cerr << "Orb exit direction scaling mismatch at " << i << '\\n';
+      std::cerr << "Orb exit direction scaling mismatch at " << i << '\n';
       return EXIT_FAILURE;
     }
   }
