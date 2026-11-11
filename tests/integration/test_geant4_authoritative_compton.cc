@@ -123,7 +123,13 @@ class TrackingObserver final : public G4UserTrackingAction {
 class DeterministicBackend final
     : public g4wgpu::PhysicsBackend {
  public:
-  enum class Scenario { compton, beyond_boundary, non_compton };
+  enum class Scenario {
+    compton,
+    beyond_boundary,
+    at_boundary,
+    non_compton,
+    rejected_compton
+  };
   Scenario scenario = Scenario::compton;
 
   std::vector<g4wgpu::GammaInteractionSample>
@@ -141,7 +147,9 @@ class DeterministicBackend final
               scenario == Scenario::non_compton
                   ? g4wgpu::GammaProcess::photoelectric
                   : g4wgpu::GammaProcess::compton,
-              scenario == Scenario::beyond_boundary ? 2000.0 : 10.0,
+              scenario == Scenario::beyond_boundary
+                  ? 2000.0
+                  : (scenario == Scenario::at_boundary ? 1000.0 : 10.0),
               1.0});
     }
 
@@ -179,7 +187,7 @@ class DeterministicBackend final
                   1.0 - cos_theta * cos_theta),
               0.0,
               1u,
-              true});
+              scenario != Scenario::rejected_compton});
     }
 
     return result;
@@ -248,10 +256,18 @@ int main() {
   if (!expect_cpu_fallback(
           DeterministicBackend::Scenario::beyond_boundary,
           "geometry-limited step") ||
+      // Exact boundary ties must be owned by Geant4 navigation, not physics.
+      !expect_cpu_fallback(
+          DeterministicBackend::Scenario::at_boundary,
+          "exact geometry-boundary tie") ||
       // Unsupported final states continue with the Geant4 CPU tracker.
       !expect_cpu_fallback(
           DeterministicBackend::Scenario::non_compton,
-          "non-Compton process")) {
+          "non-Compton process") ||
+      // A rejected Klein-Nishina sample must not be promoted.
+      !expect_cpu_fallback(
+          DeterministicBackend::Scenario::rejected_compton,
+          "rejected Compton sample")) {
     G4Gamma::GammaDefinition()->SetTrackingManager(nullptr);
     delete run_manager;
     return EXIT_FAILURE;
