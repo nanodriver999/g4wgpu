@@ -9,6 +9,11 @@ int main() {
     g4wgpu::TrackingPolicy policy;
     policy.validate();
 
+    if (policy.enable_authoritative_compton) {
+      std::cerr << "authoritative Compton must be opt-in by default\n";
+      return EXIT_FAILURE;
+    }
+
     if (!policy.should_buffer_gamma(0.0) ||
         !policy.should_buffer_gamma(10.0)) {
       std::cerr << "default tracking policy should accept gamma energies\n";
