@@ -27,3 +27,19 @@ the Box slab-intersection WGSL compute shader, and reads back f32 distances.
 differential tests, then Orb and Tubs kernels. Only after broader boundary
 and geometry tests should any result be considered for authoritative
 navigation, and actual speedup requires end-to-end timing.
+
+## Batched DistanceToOut extension
+
+The optional `box_distance_to_out_batch` API executes a second WGSL compute
+entry point in the same shader module and shares the validated f32 staging,
+buffer dispatch and readback path with `DistanceToIn`. Ray origins must be
+inside or on the Box; the C++ adapter uses the portable f64 reference to
+reject outside origins **before** f32 conversion. The GPU returns the first
+outward crossing distance, including zero for outward rays on a face.
+
+A separate software-Vulkan integration test compares more than 650 exit
+rays across multiple workgroups to `box_distance_to_out_mm`, with f32
+absolute/relative tolerances and explicit invalid-input regressions. This
+is only a standalone geometry calculation, not navigation authority. Box
+safety, Orb and Tubs WGSL calculations are still separate tasks, as are
+precision stress cases and end-to-end performance measurements.
