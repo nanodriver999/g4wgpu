@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 
 namespace {
@@ -163,6 +164,62 @@ int main() {
       }
     } catch (const std::invalid_argument&) {
       std::cerr << "f32-compatible forward angle should be accepted\n";
+      return EXIT_FAILURE;
+    }
+  }
+
+  // Invalid backend samples must not become Geant4 final states.
+  // These cases also exercise the portable CPU validation contract.
+  {
+    const double nan = std::numeric_limits<double>::quiet_NaN();
+    const double inf = std::numeric_limits<double>::infinity();
+    const g4wgpu::KleinNishinaSample forward{
+        1.0, 0.0, 1.0, 0.0, 0.0, 1u, true};
+    const auto must_reject = [&](double energy,
+                                 g4wgpu::Vector3 direction,
+                                 const g4wgpu::KleinNishinaSample& sample,
+                                 const char* label) {
+      try {
+        (void)g4wgpu::make_compton_final_state(
+            energy, direction, sample);
+      } catch (const std::invalid_argument&) {
+        return true;
+      }
+      std::cerr << "invalid Compton final state accepted: "
+                << label << '\\n';
+      return false;
+    };
+
+    if (!must_reject(0.0, incident, forward, "zero incident energy") ||
+        !must_reject(nan, incident, forward, "NaN incident energy") ||
+        !must_reject(inf, incident, forward, "infinite incident energy") ||
+        !must_reject(1.0, {0.0, 0.0, 0.0}, forward,
+                     "zero incident direction") ||
+        !must_reject(1.0, {nan, 0.0, 1.0}, forward,
+                     "NaN incident direction") ||
+        !must_reject(1.0, {inf, 0.0, 1.0}, forward,
+                     "infinite incident direction")) {
+      return EXIT_FAILURE;
+    }
+
+    auto invalid = forward;
+    invalid.phi = nan;
+    if (!must_reject(1.0, incident, invalid, "NaN azimuth")) {
+      return EXIT_FAILURE;
+    }
+    invalid = forward;
+    invalid.scattered_gamma_energy_mev = 1.1;
+    if (!must_reject(1.0, incident, invalid, "scattered energy above input")) {
+      return EXIT_FAILURE;
+    }
+    invalid = forward;
+    invalid.recoil_electron_energy_mev = -0.1;
+    if (!must_reject(1.0, incident, invalid, "negative recoil energy")) {
+      return EXIT_FAILURE;
+    }
+    invalid = forward;
+    invalid.recoil_electron_energy_mev = 0.1;
+    if (!must_reject(1.0, incident, invalid, "energy nonconservation")) {
       return EXIT_FAILURE;
     }
   }
