@@ -10,7 +10,10 @@ The portable kinematics layer:
 - constructs a stable orthonormal basis around it,
 - rotates the sampled polar/azimuthal angles into a lab-frame gamma direction,
 - obtains the recoil-electron momentum direction from momentum subtraction,
-- checks energy and relativistic electron-momentum consistency.
+- checks energy and relativistic electron-momentum consistency,
+- rejects inconsistent polar `cos(theta)`/`sin(theta)` components before
+  lab-frame direction normalization, with a small tolerance for f32 WebGPU
+  roundoff.
 
 This creates the kinematic object needed before a validated GPU Compton result
 can be promoted into a Geant4 gamma track plus recoil-electron secondary.
