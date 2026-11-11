@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cmath>
 #include <cstddef>
 
 namespace g4wgpu {
@@ -14,7 +15,8 @@ struct TrackingPolicy {
 
   [[nodiscard]] bool should_buffer_gamma(
       double kinetic_energy_mev) const noexcept {
-    return kinetic_energy_mev >= min_gamma_energy_mev;
+    return std::isfinite(kinetic_energy_mev) &&
+           kinetic_energy_mev >= min_gamma_energy_mev;
   }
 
   void validate() const;

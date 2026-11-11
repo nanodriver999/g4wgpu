@@ -1,7 +1,9 @@
 #include "g4wgpu/TrackingPolicy.hh"
 
 #include <cstdlib>
+#include <initializer_list>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 
 int main() {
@@ -66,6 +68,41 @@ int main() {
     if (!threw) {
       std::cerr << "negative energy threshold should be rejected\n";
       return EXIT_FAILURE;
+    }
+  }
+
+  {
+    g4wgpu::TrackingPolicy policy;
+    for (const double invalid_energy : {
+             std::numeric_limits<double>::quiet_NaN(),
+             std::numeric_limits<double>::infinity(),
+             -std::numeric_limits<double>::infinity()}) {
+      if (policy.should_buffer_gamma(invalid_energy)) {
+        std::cerr << "non-finite gamma energy must use CPU fallback\n";
+        return EXIT_FAILURE;
+      }
+    }
+  }
+
+  {
+    // NaN must not silently bypass the non-negative threshold check.
+    // Positive infinity is also not a meaningful tracking threshold.
+    for (const double invalid_threshold : {
+             std::numeric_limits<double>::quiet_NaN(),
+             std::numeric_limits<double>::infinity(),
+             -std::numeric_limits<double>::infinity()}) {
+      g4wgpu::TrackingPolicy policy;
+      policy.min_gamma_energy_mev = invalid_threshold;
+      bool threw = false;
+      try {
+        policy.validate();
+      } catch (const std::invalid_argument&) {
+        threw = true;
+      }
+      if (!threw) {
+        std::cerr << "non-finite energy threshold should be rejected\n";
+        return EXIT_FAILURE;
+      }
     }
   }
 
