@@ -186,7 +186,7 @@ int main() {
         return true;
       }
       std::cerr << "invalid Compton final state accepted: "
-                << label << '\\n';
+                << label << '\n';
       return false;
     };
 
