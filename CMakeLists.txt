@@ -28,6 +28,7 @@ add_library(g4wgpu_core
     src/physics/PairProductionCrossSection.cc
     src/physics/PortableGammaCrossSections.cc
     src/physics/TransportDecision.cc
+    src/geometry/BoxGeometry.cc
     src/cpu/CpuBackend.cc
 )
 
@@ -242,6 +243,17 @@ if(G4WGPU_ENABLE_GEANT4)
             COMMAND g4wgpu_geant4_pair_production_cross_section_test
         )
 
+        add_executable(g4wgpu_geant4_box_geometry_test
+            tests/integration/test_geant4_box_geometry.cc
+        )
+        target_link_libraries(g4wgpu_geant4_box_geometry_test
+            PRIVATE g4wgpu::geant4 ${Geant4_LIBRARIES}
+        )
+        add_test(
+            NAME g4wgpu.geant4_box_geometry
+            COMMAND g4wgpu_geant4_box_geometry_test
+        )
+
         add_executable(g4wgpu_geant4_boundary_distance_test
             tests/integration/test_geant4_boundary_distance.cc
         )
@@ -405,6 +417,15 @@ if(G4WGPU_BUILD_TESTING)
     add_test(
         NAME g4wgpu.transport_decision
         COMMAND g4wgpu_transport_decision_test
+    )
+
+    add_executable(g4wgpu_box_geometry_test
+        tests/numerical/test_box_geometry.cc
+    )
+    target_link_libraries(g4wgpu_box_geometry_test PRIVATE g4wgpu::core)
+    add_test(
+        NAME g4wgpu.box_geometry
+        COMMAND g4wgpu_box_geometry_test
     )
 
     add_executable(g4wgpu_tracking_policy_test
