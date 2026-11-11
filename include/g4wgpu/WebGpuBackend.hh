@@ -3,6 +3,7 @@
 #include <memory>
 #include <string_view>
 
+#include "g4wgpu/BoxGeometry.hh"
 #include "g4wgpu/ComputeBackend.hh"
 #include "g4wgpu/PhysicsBackend.hh"
 
@@ -24,6 +25,11 @@ class WebGpuBackend final : public ComputeBackend, public PhysicsBackend {
             std::vector<double>& y) override;
 
   void advance_positions(TrackBatch& tracks, double dt) override;
+
+  // Experimental standalone Box ray-entry kernel: the result is advisory
+  // and is never promoted into Geant4 navigation without further validation.
+  std::vector<double> box_distance_to_in_batch(
+      const AxisAlignedBox& box, const std::vector<BoxRay>& rays);
 
   std::vector<KleinNishinaSample> sample_klein_nishina_batch(
       const std::vector<double>& incident_gamma_energy_mev,
