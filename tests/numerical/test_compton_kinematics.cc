@@ -125,5 +125,47 @@ int main() {
     return EXIT_FAILURE;
   }
 
+  // A low-energy event previously passed the loose absolute momentum
+  // tolerance even when its polar-angle components were not physically valid.
+  // Validate the input angle before reconstructing/normalizing directions.
+  {
+    constexpr double low_energy_mev = 1.0e-4;
+    const auto must_reject = [&](double cos_theta, double sin_theta) {
+      g4wgpu::KleinNishinaSample sample{
+          low_energy_mev, 0.0, cos_theta, sin_theta, 0.0, 1u, true};
+      try {
+        (void)g4wgpu::make_compton_final_state(
+            low_energy_mev, incident, sample);
+      } catch (const std::invalid_argument&) {
+        return true;
+      }
+      return false;
+    };
+
+    if (!must_reject(0.8, 0.8) ||
+        !must_reject(1.2, 0.0) ||
+        !must_reject(0.6, -0.8)) {
+      std::cerr << "inconsistent Compton polar components were accepted\n";
+      return EXIT_FAILURE;
+    }
+
+    // f32 roundoff close to a physical forward-scattering angle remains valid.
+    const g4wgpu::KleinNishinaSample rounded_forward{
+        low_energy_mev, 0.0, 1.0 + 1.0e-7, 0.0, 0.0, 1u, true};
+    try {
+      const auto state = g4wgpu::make_compton_final_state(
+          low_energy_mev, incident, rounded_forward);
+      if (std::fabs(
+              dot(incident, state.scattered_gamma_direction) - 1.0) >
+          1.0e-12) {
+        std::cerr << "rounded forward angle changed the output direction\n";
+        return EXIT_FAILURE;
+      }
+    } catch (const std::invalid_argument&) {
+      std::cerr << "f32-compatible forward angle should be accepted\n";
+      return EXIT_FAILURE;
+    }
+  }
+
   return EXIT_SUCCESS;
 }
