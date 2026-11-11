@@ -36,3 +36,22 @@ before any navigation promotion.
 
 This does not change Geant4's authoritative navigator, tracking,
 physics, RNG or CPU fallback, and it does not claim a speedup.
+
+## Orb ray DistanceToOut (incremental GPU kernel)
+
+A further standalone, opt-in `orb_distance_to_out_batch` operation now
+dispatches `orb_exit_main` using the existing f32 ray buffers and GPU
+readback. The shader computes the positive root of the full-sphere
+ray-boundary quadratic and returns zero for outward rays starting on the
+surface. A zero-length or nonfinite ray direction, invalid radius, or
+point outside the sphere is rejected on the host.
+
+Crucially, the host validates the original f64 input using
+`orb_distance_to_out_mm`, **not** a Box-only containment check; points
+outside Orb but inside its surrounding Box are invalid. The new
+software-Vulkan integration test compares more than 650 non-grazing
+interior/surface rays with the independent CPU reference, including
+non-unit directions and explicit f32 error bounds.
+
+The operation remains advisory: no Geant4 navigator promotion, CPU
+fallback removal, physics changes, RNG changes, or speedup claim.

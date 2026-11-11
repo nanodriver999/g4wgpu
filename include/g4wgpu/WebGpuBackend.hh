@@ -61,6 +61,11 @@ class WebGpuBackend final : public ComputeBackend, public PhysicsBackend {
   std::vector<double> orb_distance_to_in_batch(
       const PortableOrb& orb, const std::vector<OrbRay>& rays);
 
+  // Experimental full-sphere exit distance (mm). Ray origins must be on
+  // or inside Orb, not merely inside its bounding Box.
+  std::vector<double> orb_distance_to_out_batch(
+      const PortableOrb& orb, const std::vector<OrbRay>& rays);
+
   std::vector<KleinNishinaSample> sample_klein_nishina_batch(
       const std::vector<double>& incident_gamma_energy_mev,
       std::vector<RngAddress>& rng,
