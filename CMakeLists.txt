@@ -491,6 +491,17 @@ if(G4WGPU_BUILD_TESTING)
             COMMAND g4wgpu_webgpu_backend_test
         )
 
+        add_executable(g4wgpu_webgpu_box_geometry_test
+            tests/integration/test_webgpu_box_geometry.cc
+        )
+        target_link_libraries(g4wgpu_webgpu_box_geometry_test
+            PRIVATE g4wgpu::core
+        )
+        add_test(
+            NAME g4wgpu.webgpu_box_geometry
+            COMMAND g4wgpu_webgpu_box_geometry_test
+        )
+
         add_executable(g4wgpu_webgpu_klein_nishina_test
             tests/integration/test_webgpu_klein_nishina.cc
         )
