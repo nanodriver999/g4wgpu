@@ -1,6 +1,7 @@
 #include "g4wgpu/TubsGeometry.hh"
 
 #include <cmath>
+#include <cstddef>
 #include <cstdlib>
 #include <iostream>
 #include <limits>
@@ -62,6 +63,41 @@ int main() {
                 tubs, {15.0, 0.0, 0.0}), 0.0)) {
     std::cerr << "solid Tubs safety distances are incorrect\n";
     return EXIT_FAILURE;
+  }
+
+  // Geometric ray distance is measured in millimetres and must not
+  // depend on the magnitude of a nonzero direction vector. Exercise both
+  // radial and end-cap intersections, including oblique rays.
+  const V entry_points[] = {
+      {15.0, 0.0, 0.0}, {0.0, 0.0, 30.0},
+      {15.0, 0.0, 30.0}, {30.0, 0.0, 0.0}};
+  const V entry_directions[] = {
+      {-1.0, 0.0, 0.0}, {0.0, 0.0, -1.0},
+      {-1.0, 0.0, -1.0}, {-1.0, 0.0, -0.25}};
+  const V exit_points[] = {
+      {0.0, 0.0, 0.0}, {0.0, 0.0, 15.0},
+      {3.0, 4.0, 0.0}, {0.0, 0.0, -15.0}};
+  const V exit_directions[] = {
+      {1.0, 0.0, 0.0}, {0.0, 0.0, 1.0},
+      {1.0, 1.0, 1.0}, {1.0, 0.0, -1.0}};
+  const double scales[] = {0.125, 0.5, 2.0, 16.0, 1024.0};
+  for (std::size_t i = 0; i < 4; ++i) {
+    const double reference_in = entry(entry_points[i], entry_directions[i]);
+    const double reference_out = exit(exit_points[i], exit_directions[i]);
+    for (const double scale : scales) {
+      const V in_dir = entry_directions[i];
+      const V out_dir = exit_directions[i];
+      const double actual_in = entry(
+          entry_points[i], {scale * in_dir.x, scale * in_dir.y, scale * in_dir.z});
+      const double actual_out = exit(
+          exit_points[i], {scale * out_dir.x, scale * out_dir.y, scale * out_dir.z});
+      if (!near(actual_in, reference_in, 1.0e-8) ||
+          !near(actual_out, reference_out, 1.0e-8)) {
+        std::cerr << "Tubs ray distance changed with direction scale at case "
+                  << i << " scale " << scale << '\n';
+        return EXIT_FAILURE;
+      }
+    }
   }
 
   const auto rejects = [](const auto& fn) {
