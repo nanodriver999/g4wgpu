@@ -94,7 +94,7 @@ int main() {
       if (!near(actual_in, reference_in, 1.0e-8) ||
           !near(actual_out, reference_out, 1.0e-8)) {
         std::cerr << "Tubs ray distance changed with direction scale at case "
-                  << i << " scale " << scale << '\\n';
+                  << i << " scale " << scale << '\n';
         return EXIT_FAILURE;
       }
     }
