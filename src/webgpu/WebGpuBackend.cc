@@ -357,6 +357,44 @@ fn orb_safety_out_main(@builtin(global_invocation_id) id: vec3<u32>) {
   let p = vec3<f32>(ray.px, ray.py, ray.pz);
   distances[index] = max(0.0, params.half_x - length(p));
 }
+
+// Entry ray intersection with a full sphere centered at the local origin.
+// Non-grazing external rays use the stable near-root form of the quadratic.
+// A tangent does not enter the interior; inside/on-surface starts yield 0.
+@compute @workgroup_size(128)
+fn orb_entry_main(@builtin(global_invocation_id) id: vec3<u32>) {
+  let index = id.x;
+  if (index >= params.count) {
+    return;
+  }
+
+  let ray = rays[index];
+  let p = vec3<f32>(ray.px, ray.py, ray.pz);
+  let d = vec3<f32>(ray.dx, ray.dy, ray.dz);
+  let radius = params.half_x;
+  let infinity = bitcast<f32>(0x7f800000u);
+
+  let radial = length(p);
+  if (radial <= radius) {
+    distances[index] = 0.0;
+    return;
+  }
+
+  let b = dot(p, d);
+  if (b >= 0.0) {
+    distances[index] = infinity;
+    return;
+  }
+
+  let c = (radial - radius) * (radial + radius);
+  let discriminant = b * b - c;
+  if (discriminant <= 0.0) {
+    distances[index] = infinity;
+    return;
+  }
+
+  distances[index] = c / (-b + sqrt(discriminant));
+}
 )WGSL";
 
 struct DispatchResources {
@@ -1063,6 +1101,28 @@ std::vector<double> WebGpuBackend::orb_safety_to_out_batch(
       box_safety_positions_as_rays(
           orb_positions_as_box_positions(positions)),
       "orb_safety_out_main", false);
+}
+
+std::vector<double> WebGpuBackend::orb_distance_to_in_batch(
+    const PortableOrb& orb, const std::vector<OrbRay>& rays) {
+  // Validate the original f64 radius before any f32 narrowing. GPU
+  // staging performs its own range and normalized-direction checks.
+  (void)orb_safety_to_in_mm(orb, OrbVector3{});
+  const AxisAlignedBox staging_box{{orb.radius_mm, orb.radius_mm,
+                                    orb.radius_mm}};
+  std::vector<BoxRay> staged;
+  staged.reserve(rays.size());
+  for (const OrbRay& ray : rays) {
+    staged.push_back(BoxRay{
+        BoxVector3{ray.position_mm.x,
+                   ray.position_mm.y,
+                   ray.position_mm.z},
+        BoxVector3{ray.direction.x,
+                   ray.direction.y,
+                   ray.direction.z}});
+  }
+  return impl_->box_distance_batch(
+      staging_box, staged, "orb_entry_main", false);
 }
 
 void WebGpuBackend::advance_positions(TrackBatch& tracks, const double dt) {

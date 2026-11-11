@@ -14,6 +14,12 @@ struct PortableOrb {
   double radius_mm = 0.0;
 };
 
+// Local-coordinate ray for optional WebGPU Orb entry calculations.
+struct OrbRay {
+  OrbVector3 position_mm;
+  OrbVector3 direction;
+};
+
 // Physical ray distances (mm); non-unit directions are normalized internally.
 // External rays that miss, point away, or only graze return +infinity.
 // A ray starting on/inside the sphere has zero distance to enter.

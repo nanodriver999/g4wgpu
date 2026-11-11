@@ -17,3 +17,22 @@ multiple workgroups, including inside/outside, face, near-boundary,
 diagonal and invalid-input cases. This does not implement Orb ray
 intersection, Geant4 navigation or a measured performance improvement.
 Geant4 CPU fallback and RNG/physics calculations remain unchanged.
+
+## Orb ray DistanceToIn (incremental GPU kernel)
+
+A standalone `orb_distance_to_in_batch` operation now dispatches
+`orb_entry_main` through the same verified WebGPU input/output staging
+path. It computes full-sphere entry distance with the near-root quadratic
+formula, returns zero for inside/on-surface rays and positive infinity
+for outward, missing, or tangent external rays. Rays are normalized on
+the CPU in f64 before staging to f32, and invalid/nonfinite input is
+rejected before GPU execution.
+
+The software-Vulkan test compares >640 varied hit/miss/inside rays against
+the portable `orb_distance_to_in_mm` f64 reference across several GPU
+workgroups. Test tolerances explicitly allow f32 rounding. Boundary
+classification for nearly grazing rays requires additional focused tests
+before any navigation promotion.
+
+This does not change Geant4's authoritative navigator, tracking,
+physics, RNG or CPU fallback, and it does not claim a speedup.
