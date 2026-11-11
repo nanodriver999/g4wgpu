@@ -395,6 +395,28 @@ fn orb_entry_main(@builtin(global_invocation_id) id: vec3<u32>) {
 
   distances[index] = c / (-b + sqrt(discriminant));
 }
+
+// Exit ray intersection for an origin on/inside a full sphere.
+// The host validates the original f64 origin against Orb rather than
+// Box bounds before uploading the normalized direction as f32.
+@compute @workgroup_size(128)
+fn orb_exit_main(@builtin(global_invocation_id) id: vec3<u32>) {
+  let index = id.x;
+  if (index >= params.count) {
+    return;
+  }
+
+  let ray = rays[index];
+  let p = vec3<f32>(ray.px, ray.py, ray.pz);
+  let d = vec3<f32>(ray.dx, ray.dy, ray.dz);
+  let radius = params.half_x;
+
+  let radial = length(p);
+  let b = dot(p, d);
+  let c = (radial - radius) * (radial + radius);
+  let discriminant = max(0.0, b * b - c);
+  distances[index] = max(0.0, -b + sqrt(discriminant));
+}
 )WGSL";
 
 struct DispatchResources {
@@ -1123,6 +1145,30 @@ std::vector<double> WebGpuBackend::orb_distance_to_in_batch(
   }
   return impl_->box_distance_batch(
       staging_box, staged, "orb_entry_main", false);
+}
+
+std::vector<double> WebGpuBackend::orb_distance_to_out_batch(
+    const PortableOrb& orb, const std::vector<OrbRay>& rays) {
+  // Validate true Orb containment in f64: a point inside the bounding
+  // Box can be outside the sphere, and would produce a false exit.
+  (void)orb_safety_to_out_mm(orb, OrbVector3{});
+  const AxisAlignedBox staging_box{{orb.radius_mm, orb.radius_mm,
+                                    orb.radius_mm}};
+  std::vector<BoxRay> staged;
+  staged.reserve(rays.size());
+  for (const OrbRay& ray : rays) {
+    (void)orb_distance_to_out_mm(orb, ray.position_mm, ray.direction);
+    staged.push_back(BoxRay{
+        BoxVector3{ray.position_mm.x,
+                   ray.position_mm.y,
+                   ray.position_mm.z},
+        BoxVector3{ray.direction.x,
+                   ray.direction.y,
+                   ray.direction.z}});
+  }
+  // Validation above is for Orb; do not apply Box-specific containment.
+  return impl_->box_distance_batch(
+      staging_box, staged, "orb_exit_main", false);
 }
 
 void WebGpuBackend::advance_positions(TrackBatch& tracks, const double dt) {
