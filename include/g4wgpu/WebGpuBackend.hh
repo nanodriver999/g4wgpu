@@ -36,6 +36,16 @@ class WebGpuBackend final : public ComputeBackend, public PhysicsBackend {
   std::vector<double> box_distance_to_out_batch(
       const AxisAlignedBox& box, const std::vector<BoxRay>& rays);
 
+  // Experimental Box safety kernels: use only positions (not ray
+  // directions), return conservative distances in mm, and never
+  // replace Geant4's authoritative geometry navigation.
+  std::vector<double> box_safety_to_in_batch(
+      const AxisAlignedBox& box,
+      const std::vector<BoxVector3>& positions);
+  std::vector<double> box_safety_to_out_batch(
+      const AxisAlignedBox& box,
+      const std::vector<BoxVector3>& positions);
+
   std::vector<KleinNishinaSample> sample_klein_nishina_batch(
       const std::vector<double>& incident_gamma_energy_mev,
       std::vector<RngAddress>& rng,

@@ -303,6 +303,36 @@ fn exit_main(@builtin(global_invocation_id) id: vec3<u32>) {
 
   distances[index] = max(0.0, exit_distance);
 }
+
+// Conservative inward safety in local millimeters. The CPU Box reference
+// uses max(axis clearance, 0), rather than Euclidean corner distance.
+@compute @workgroup_size(128)
+fn safety_in_main(@builtin(global_invocation_id) id: vec3<u32>) {
+  let index = id.x;
+  if (index >= params.count) {
+    return;
+  }
+  let ray = rays[index];
+  let p = vec3<f32>(ray.px, ray.py, ray.pz);
+  let half = vec3<f32>(params.half_x, params.half_y, params.half_z);
+  let outside = abs(p) - half;
+  distances[index] = max(0.0, max(outside.x, max(outside.y, outside.z)));
+}
+
+// Outward safety is the smallest distance to a Box face, clamped to zero
+// for points outside/on the Box. No ray direction is needed.
+@compute @workgroup_size(128)
+fn safety_out_main(@builtin(global_invocation_id) id: vec3<u32>) {
+  let index = id.x;
+  if (index >= params.count) {
+    return;
+  }
+  let ray = rays[index];
+  let p = vec3<f32>(ray.px, ray.py, ray.pz);
+  let half = vec3<f32>(params.half_x, params.half_y, params.half_z);
+  let inside = half - abs(p);
+  distances[index] = max(0.0, min(inside.x, min(inside.y, inside.z)));
+}
 )WGSL";
 
 struct DispatchResources {
@@ -627,7 +657,7 @@ class WebGpuBackend::Impl {
   std::vector<double> box_distance_batch(
       const AxisAlignedBox& box,
       const std::vector<BoxRay>& rays,
-      const bool to_out) {
+      const char* entry_point, const bool require_inside) {
     const auto finite_f32 = [](double value) -> float {
       if (!std::isfinite(value) ||
           std::fabs(value) >
@@ -669,7 +699,7 @@ class WebGpuBackend::Impl {
       // A Geant4 navigation-like DistanceToOut is only defined for
       // origins inside/on this solid. Validate original f64 inputs before
       // any f32 narrowing (the CPU function also checks the direction).
-      if (to_out) {
+      if (require_inside) {
         (void)box_distance_to_out_mm(
             box, ray.position_mm, ray.direction);
       }
@@ -712,8 +742,7 @@ class WebGpuBackend::Impl {
 
     WGPUComputeState compute = WGPU_COMPUTE_STATE_INIT;
     compute.module = resources.shader;
-    compute.entryPoint =
-        string_view(to_out ? "exit_main" : "main");
+    compute.entryPoint = string_view(entry_point);
     WGPUComputePipelineDescriptor pipeline_descriptor =
         WGPU_COMPUTE_PIPELINE_DESCRIPTOR_INIT;
     pipeline_descriptor.label =
@@ -932,13 +961,46 @@ void WebGpuBackend::axpy(const double a, const std::vector<double>& x,
 std::vector<double> WebGpuBackend::box_distance_to_in_batch(
     const AxisAlignedBox& box,
     const std::vector<BoxRay>& rays) {
-  return impl_->box_distance_batch(box, rays, false);
+  return impl_->box_distance_batch(box, rays, "main", false);
 }
 
 std::vector<double> WebGpuBackend::box_distance_to_out_batch(
     const AxisAlignedBox& box,
     const std::vector<BoxRay>& rays) {
-  return impl_->box_distance_batch(box, rays, true);
+  return impl_->box_distance_batch(box, rays, "exit_main", true);
+}
+
+namespace {
+
+// The safety shaders consume only ray positions, not directions. Reuse
+// the existing 32-byte BoxRay staging layout to avoid a second GPU format.
+// The fixed direction is never used by a safety shader.
+std::vector<BoxRay> box_safety_positions_as_rays(
+    const std::vector<BoxVector3>& positions) {
+  std::vector<BoxRay> rays;
+  rays.reserve(positions.size());
+  for (const BoxVector3& position : positions) {
+    rays.push_back(BoxRay{position, BoxVector3{1.0, 0.0, 0.0}});
+  }
+  return rays;
+}
+
+}  // namespace
+
+std::vector<double> WebGpuBackend::box_safety_to_in_batch(
+    const AxisAlignedBox& box,
+    const std::vector<BoxVector3>& positions) {
+  return impl_->box_distance_batch(
+      box, box_safety_positions_as_rays(positions),
+      "safety_in_main", false);
+}
+
+std::vector<double> WebGpuBackend::box_safety_to_out_batch(
+    const AxisAlignedBox& box,
+    const std::vector<BoxVector3>& positions) {
+  return impl_->box_distance_batch(
+      box, box_safety_positions_as_rays(positions),
+      "safety_out_main", false);
 }
 
 void WebGpuBackend::advance_positions(TrackBatch& tracks, const double dt) {
