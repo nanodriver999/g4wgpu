@@ -269,6 +269,40 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     distances[index] = max(0.0, entry);
   }
 }
+
+// A second entry point for rays whose origin lies within/on the box.
+// The host checks the f64 input against the CPU reference contract before
+// any f32 quantization; this shader computes the first outward crossing.
+@compute @workgroup_size(128)
+fn exit_main(@builtin(global_invocation_id) id: vec3<u32>) {
+  let index = id.x;
+  if (index >= params.count) {
+    return;
+  }
+
+  let ray = rays[index];
+  let p = vec3<f32>(ray.px, ray.py, ray.pz);
+  let d = vec3<f32>(ray.dx, ray.dy, ray.dz);
+  let half = vec3<f32>(
+      params.half_x, params.half_y, params.half_z);
+  let infinity = bitcast<f32>(0x7f800000u);
+  var exit_distance = infinity;
+
+  for (var axis = 0u; axis < 3u; axis = axis + 1u) {
+    let origin = p[axis];
+    let direction = d[axis];
+    let extent = half[axis];
+    if (direction > 0.0) {
+      exit_distance =
+          min(exit_distance, (extent - origin) / direction);
+    } else if (direction < 0.0) {
+      exit_distance =
+          min(exit_distance, (-extent - origin) / direction);
+    }
+  }
+
+  distances[index] = max(0.0, exit_distance);
+}
 )WGSL";
 
 struct DispatchResources {
@@ -590,9 +624,10 @@ class WebGpuBackend::Impl {
   }
 
 
-  std::vector<double> box_distance_to_in_batch(
+  std::vector<double> box_distance_batch(
       const AxisAlignedBox& box,
-      const std::vector<BoxRay>& rays) {
+      const std::vector<BoxRay>& rays,
+      const bool to_out) {
     const auto finite_f32 = [](double value) -> float {
       if (!std::isfinite(value) ||
           std::fabs(value) >
@@ -631,6 +666,13 @@ class WebGpuBackend::Impl {
     std::vector<GpuBoxRay> inputs;
     inputs.reserve(rays.size());
     for (const BoxRay& ray : rays) {
+      // A Geant4 navigation-like DistanceToOut is only defined for
+      // origins inside/on this solid. Validate original f64 inputs before
+      // any f32 narrowing (the CPU function also checks the direction).
+      if (to_out) {
+        (void)box_distance_to_out_mm(
+            box, ray.position_mm, ray.direction);
+      }
       const float px = finite_f32(ray.position_mm.x);
       const float py = finite_f32(ray.position_mm.y);
       const float pz = finite_f32(ray.position_mm.z);
@@ -670,7 +712,8 @@ class WebGpuBackend::Impl {
 
     WGPUComputeState compute = WGPU_COMPUTE_STATE_INIT;
     compute.module = resources.shader;
-    compute.entryPoint = string_view("main");
+    compute.entryPoint =
+        string_view(to_out ? "exit_main" : "main");
     WGPUComputePipelineDescriptor pipeline_descriptor =
         WGPU_COMPUTE_PIPELINE_DESCRIPTOR_INIT;
     pipeline_descriptor.label =
@@ -889,7 +932,13 @@ void WebGpuBackend::axpy(const double a, const std::vector<double>& x,
 std::vector<double> WebGpuBackend::box_distance_to_in_batch(
     const AxisAlignedBox& box,
     const std::vector<BoxRay>& rays) {
-  return impl_->box_distance_to_in_batch(box, rays);
+  return impl_->box_distance_batch(box, rays, false);
+}
+
+std::vector<double> WebGpuBackend::box_distance_to_out_batch(
+    const AxisAlignedBox& box,
+    const std::vector<BoxRay>& rays) {
+  return impl_->box_distance_batch(box, rays, true);
 }
 
 void WebGpuBackend::advance_positions(TrackBatch& tracks, const double dt) {
