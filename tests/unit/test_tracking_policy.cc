@@ -72,6 +72,19 @@ int main() {
   }
 
   {
+    g4wgpu::TrackingPolicy policy;
+    for (const double invalid_energy : {
+             std::numeric_limits<double>::quiet_NaN(),
+             std::numeric_limits<double>::infinity(),
+             -std::numeric_limits<double>::infinity()}) {
+      if (policy.should_buffer_gamma(invalid_energy)) {
+        std::cerr << "non-finite gamma energy must use CPU fallback\n";
+        return EXIT_FAILURE;
+      }
+    }
+  }
+
+  {
     // NaN must not silently bypass the non-negative threshold check.
     // Positive infinity is also not a meaningful tracking threshold.
     for (const double invalid_threshold : {
