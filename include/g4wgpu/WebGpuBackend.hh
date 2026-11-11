@@ -31,6 +31,11 @@ class WebGpuBackend final : public ComputeBackend, public PhysicsBackend {
   std::vector<double> box_distance_to_in_batch(
       const AxisAlignedBox& box, const std::vector<BoxRay>& rays);
 
+  // Experimental standalone Box exit distance. Points must be on/inside
+  // the Box; Geant4 CPU navigation remains authoritative.
+  std::vector<double> box_distance_to_out_batch(
+      const AxisAlignedBox& box, const std::vector<BoxRay>& rays);
+
   std::vector<KleinNishinaSample> sample_klein_nishina_batch(
       const std::vector<double>& incident_gamma_energy_mev,
       std::vector<RngAddress>& rng,
