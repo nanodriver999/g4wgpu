@@ -14,6 +14,13 @@ struct AxisAlignedBox {
   BoxVector3 half_lengths_mm;
 };
 
+// A local-coordinate ray. Used as input for the optional batched WebGPU
+// Box-entry experiment; it does not change Geant4 navigation ownership.
+struct BoxRay {
+  BoxVector3 position_mm;
+  BoxVector3 direction;
+};
+
 // Return +infinity if an external ray misses the box. A starting point on
 // or within the box has zero entry distance. Ray directions are normalized
 // internally; the output is a physical distance in mm.
