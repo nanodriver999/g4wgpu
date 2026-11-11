@@ -39,7 +39,7 @@ bool check(const char* shape, const char* operation,
     return true;
   }
   std::cerr << shape << " " << operation << " case " << case_index
-            << " f64=" << reference << " f32-input=" << quantized << '\\n';
+            << " f64=" << reference << " f32-input=" << quantized << '\n';
   return false;
 }
 
