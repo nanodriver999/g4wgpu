@@ -333,6 +333,30 @@ fn safety_out_main(@builtin(global_invocation_id) id: vec3<u32>) {
   let inside = half - abs(p);
   distances[index] = max(0.0, min(inside.x, min(inside.y, inside.z)));
 }
+
+// Orb safety uses the first parameter component as the radius. The
+// staging format is shared with Box, but this is a radial distance.
+@compute @workgroup_size(128)
+fn orb_safety_in_main(@builtin(global_invocation_id) id: vec3<u32>) {
+  let index = id.x;
+  if (index >= params.count) {
+    return;
+  }
+  let ray = rays[index];
+  let p = vec3<f32>(ray.px, ray.py, ray.pz);
+  distances[index] = max(0.0, length(p) - params.half_x);
+}
+
+@compute @workgroup_size(128)
+fn orb_safety_out_main(@builtin(global_invocation_id) id: vec3<u32>) {
+  let index = id.x;
+  if (index >= params.count) {
+    return;
+  }
+  let ray = rays[index];
+  let p = vec3<f32>(ray.px, ray.py, ray.pz);
+  distances[index] = max(0.0, params.half_x - length(p));
+}
 )WGSL";
 
 struct DispatchResources {
@@ -1001,6 +1025,44 @@ std::vector<double> WebGpuBackend::box_safety_to_out_batch(
   return impl_->box_distance_batch(
       box, box_safety_positions_as_rays(positions),
       "safety_out_main", false);
+}
+
+namespace {
+
+std::vector<BoxVector3> orb_positions_as_box_positions(
+    const std::vector<OrbVector3>& positions) {
+  std::vector<BoxVector3> result;
+  result.reserve(positions.size());
+  for (const OrbVector3& position : positions) {
+    result.push_back(BoxVector3{position.x, position.y, position.z});
+  }
+  return result;
+}
+
+}  // namespace
+
+std::vector<double> WebGpuBackend::orb_safety_to_in_batch(
+    const PortableOrb& orb, const std::vector<OrbVector3>& positions) {
+  (void)orb_safety_to_in_mm(orb, OrbVector3{});
+  const AxisAlignedBox staging_box{{orb.radius_mm, orb.radius_mm,
+                                    orb.radius_mm}};
+  return impl_->box_distance_batch(
+      staging_box,
+      box_safety_positions_as_rays(
+          orb_positions_as_box_positions(positions)),
+      "orb_safety_in_main", false);
+}
+
+std::vector<double> WebGpuBackend::orb_safety_to_out_batch(
+    const PortableOrb& orb, const std::vector<OrbVector3>& positions) {
+  (void)orb_safety_to_out_mm(orb, OrbVector3{});
+  const AxisAlignedBox staging_box{{orb.radius_mm, orb.radius_mm,
+                                    orb.radius_mm}};
+  return impl_->box_distance_batch(
+      staging_box,
+      box_safety_positions_as_rays(
+          orb_positions_as_box_positions(positions)),
+      "orb_safety_out_main", false);
 }
 
 void WebGpuBackend::advance_positions(TrackBatch& tracks, const double dt) {
