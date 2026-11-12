@@ -94,6 +94,12 @@ int main() {
       {{0,30,0}, {0,-1,0}, Kind::world_exit, 0u},
       {{0,0,0}, {1,0.1,0}, Kind::daughter_entry, 22u},
       {{0,0,0}, {-1,0.1,0}, Kind::daughter_entry, 11u},
+      // Oblique rays that miss both daughters must reach the world;
+      // orthogonal rays from inside a daughter exit its side faces.
+      {{0,0,0}, {1,1,0}, Kind::world_exit, 0u},
+      {{0,0,0}, {1,0,1}, Kind::world_exit, 0u},
+      {{25,0,0}, {0,1,0}, Kind::daughter_exit, 22u},
+      {{-35,0,0}, {0,0,-1}, Kind::daughter_exit, 11u},
       // 1 micron of nonzero clearance from the next face. These rays
       // exercise the independent Geant4 navigator oracle, not just the
       // portable CPU implementation (surface starts remain excluded).
