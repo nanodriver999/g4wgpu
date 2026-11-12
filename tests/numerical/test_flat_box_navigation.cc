@@ -95,6 +95,21 @@ int main() {
     }
   }
 
+  // Interior points close to a daughter face must not skip the next
+  // boundary or confuse entry with exit. Keep nonzero clearance to avoid
+  // Geant4's surface-start ambiguity.
+  if (!matches(next({14.999,0,0}, {1,0,0}),
+               Kind::daughter_entry, 0.001, 22u) ||
+      !matches(next({34.999,0,0}, {1,0,0}),
+               Kind::daughter_exit, 0.001, 22u) ||
+      !matches(next({-42.999,0,0}, {-1,0,0}),
+               Kind::daughter_exit, 0.001, 11u) ||
+      !matches(next({0,0,99.999}, {0,0,1}),
+               Kind::world_exit, 0.001, 0u)) {
+    std::cerr << "flat Box near-boundary clearance mismatch\\n";
+    return EXIT_FAILURE;
+  }
+
   Scene world_only;
   world_only.world = scene.world;
   if (!matches(g4wgpu::flat_box_next_boundary_mm(
