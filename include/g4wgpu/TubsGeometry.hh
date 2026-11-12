@@ -11,6 +11,11 @@ struct TubsVector3 {
   double z = 0.0;
 };
 
+struct TubsRay {
+  TubsVector3 position_mm;
+  TubsVector3 direction;
+};
+
 struct PortableSolidTubs {
   double outer_radius_mm = 0.0;
   double half_length_z_mm = 0.0;
