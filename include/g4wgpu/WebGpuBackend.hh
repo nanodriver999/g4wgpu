@@ -5,6 +5,7 @@
 
 #include "g4wgpu/BoxGeometry.hh"
 #include "g4wgpu/OrbGeometry.hh"
+#include "g4wgpu/TubsGeometry.hh"
 #include "g4wgpu/ComputeBackend.hh"
 #include "g4wgpu/PhysicsBackend.hh"
 
@@ -55,6 +56,14 @@ class WebGpuBackend final : public ComputeBackend, public PhysicsBackend {
   std::vector<double> orb_safety_to_out_batch(
       const PortableOrb& orb,
       const std::vector<OrbVector3>& positions);
+
+  // Experimental full-azimuth solid Tubs safety; CPU navigation owns truth.
+  std::vector<double> tubs_safety_to_in_batch(
+      const PortableSolidTubs& tubs,
+      const std::vector<TubsVector3>& positions);
+  std::vector<double> tubs_safety_to_out_batch(
+      const PortableSolidTubs& tubs,
+      const std::vector<TubsVector3>& positions);
 
   // Standalone, non-authoritative full-sphere ray entry distances in mm.
   // A miss is positive infinity; GPU f32 rounding is tested vs CPU f64.
