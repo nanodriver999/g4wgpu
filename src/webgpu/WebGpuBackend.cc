@@ -380,6 +380,65 @@ fn tubs_safety_out_main(@builtin(global_invocation_id) id: vec3<u32>) {
                                   params.half_z - abs(ray.pz)));
 }
 
+
+// Entry distance for a solid full-azimuth Tubs (radial cylinder intersected
+// with an axial slab). External tangent rays do not enter the interior.
+@compute @workgroup_size(128)
+fn tubs_entry_main(@builtin(global_invocation_id) id: vec3<u32>) {
+  let index = id.x;
+  if (index >= params.count) { return; }
+  let ray = rays[index];
+  let p = vec3<f32>(ray.px, ray.py, ray.pz);
+  let d = vec3<f32>(ray.dx, ray.dy, ray.dz);
+  let radius = params.half_x;
+  let half_z = params.half_z;
+  let infinity = bitcast<f32>(0x7f800000u);
+  let radial = length(p.xy);
+  if (radial <= radius && abs(p.z) <= half_z) {
+    distances[index] = 0.0;
+    return;
+  }
+  var entry = -infinity;
+  var exit = infinity;
+  let a = dot(d.xy, d.xy);
+  if (a == 0.0) {
+    if (radial > radius) {
+      distances[index] = infinity;
+      return;
+    }
+  } else {
+    let b = dot(p.xy, d.xy);
+    let c = (radial - radius) * (radial + radius);
+    let discriminant = b * b - a * c;
+    if (discriminant <= 0.0) {
+      distances[index] = infinity;
+      return;
+    }
+    let root = sqrt(discriminant);
+    let q = -b - select(-root, root, b >= 0.0);
+    let t0 = q / a;
+    let t1 = c / q;
+    entry = min(t0, t1);
+    exit = max(t0, t1);
+  }
+  if (d.z == 0.0) {
+    if (abs(p.z) > half_z) {
+      distances[index] = infinity;
+      return;
+    }
+  } else {
+    let t0 = (-half_z - p.z) / d.z;
+    let t1 = (half_z - p.z) / d.z;
+    entry = max(entry, min(t0, t1));
+    exit = min(exit, max(t0, t1));
+  }
+  if (exit <= max(0.0, entry)) {
+    distances[index] = infinity;
+    return;
+  }
+  distances[index] = max(0.0, entry);
+}
+
 // Entry ray intersection with a full sphere centered at the local origin.
 // Non-grazing external rays use the stable near-root form of the quadratic.
 // A tangent does not enter the interior; inside/on-surface starts yield 0.
@@ -1177,6 +1236,24 @@ std::vector<double> WebGpuBackend::orb_safety_to_out_batch(
       box_safety_positions_as_rays(
           orb_positions_as_box_positions(positions)),
       "orb_safety_out_main", false);
+}
+
+
+std::vector<double> WebGpuBackend::tubs_distance_to_in_batch(
+    const PortableSolidTubs& tubs, const std::vector<TubsRay>& rays) {
+  // Validate f64 geometry before GPU staging narrows it to f32.
+  (void)tubs_safety_to_in_mm(tubs, TubsVector3{});
+  const AxisAlignedBox staging_box{{
+      tubs.outer_radius_mm, tubs.outer_radius_mm, tubs.half_length_z_mm}};
+  std::vector<BoxRay> staged;
+  staged.reserve(rays.size());
+  for (const TubsRay& ray : rays) {
+    staged.push_back(BoxRay{
+        {ray.position_mm.x, ray.position_mm.y, ray.position_mm.z},
+        {ray.direction.x, ray.direction.y, ray.direction.z}});
+  }
+  return impl_->box_distance_batch(
+      staging_box, staged, "tubs_entry_main", false);
 }
 
 std::vector<double> WebGpuBackend::orb_distance_to_in_batch(
