@@ -358,6 +358,28 @@ fn orb_safety_out_main(@builtin(global_invocation_id) id: vec3<u32>) {
   distances[index] = max(0.0, params.half_x - length(p));
 }
 
+// Solid full-azimuth cylinder safety, with radius in half_x and half_z
+// as axial half-length. This is not a Geant4 navigation replacement.
+@compute @workgroup_size(128)
+fn tubs_safety_in_main(@builtin(global_invocation_id) id: vec3<u32>) {
+  let index = id.x;
+  if (index >= params.count) { return; }
+  let ray = rays[index];
+  let radial = length(vec2<f32>(ray.px, ray.py));
+  distances[index] = max(0.0, max(radial - params.half_x,
+                                  abs(ray.pz) - params.half_z));
+}
+
+@compute @workgroup_size(128)
+fn tubs_safety_out_main(@builtin(global_invocation_id) id: vec3<u32>) {
+  let index = id.x;
+  if (index >= params.count) { return; }
+  let ray = rays[index];
+  let radial = length(vec2<f32>(ray.px, ray.py));
+  distances[index] = max(0.0, min(params.half_x - radial,
+                                  params.half_z - abs(ray.pz)));
+}
+
 // Entry ray intersection with a full sphere centered at the local origin.
 // Non-grazing external rays use the stable near-root form of the quadratic.
 // A tangent does not enter the interior; inside/on-surface starts yield 0.
@@ -1100,6 +1122,38 @@ std::vector<BoxVector3> orb_positions_as_box_positions(
 }
 
 }  // namespace
+
+std::vector<double> WebGpuBackend::tubs_safety_to_in_batch(
+    const PortableSolidTubs& tubs,
+    const std::vector<TubsVector3>& positions) {
+  (void)tubs_safety_to_in_mm(tubs, TubsVector3{});
+  const AxisAlignedBox staging_box{{
+      tubs.outer_radius_mm, tubs.outer_radius_mm, tubs.half_length_z_mm}};
+  std::vector<BoxVector3> staged;
+  staged.reserve(positions.size());
+  for (const auto& p : positions) {
+    staged.push_back({p.x, p.y, p.z});
+  }
+  return impl_->box_distance_batch(
+      staging_box, box_safety_positions_as_rays(staged),
+      "tubs_safety_in_main", false);
+}
+
+std::vector<double> WebGpuBackend::tubs_safety_to_out_batch(
+    const PortableSolidTubs& tubs,
+    const std::vector<TubsVector3>& positions) {
+  (void)tubs_safety_to_out_mm(tubs, TubsVector3{});
+  const AxisAlignedBox staging_box{{
+      tubs.outer_radius_mm, tubs.outer_radius_mm, tubs.half_length_z_mm}};
+  std::vector<BoxVector3> staged;
+  staged.reserve(positions.size());
+  for (const auto& p : positions) {
+    staged.push_back({p.x, p.y, p.z});
+  }
+  return impl_->box_distance_batch(
+      staging_box, box_safety_positions_as_rays(staged),
+      "tubs_safety_out_main", false);
+}
 
 std::vector<double> WebGpuBackend::orb_safety_to_in_batch(
     const PortableOrb& orb, const std::vector<OrbVector3>& positions) {
