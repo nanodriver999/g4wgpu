@@ -100,6 +100,40 @@ int main() {
     }
   }
 
+  // Safety is a conservative lower bound on the distance to a boundary.
+  // These cases cover radial, end-cap, and corner approaches before the
+  // corresponding f32 WebGPU Tubs kernels are introduced.
+  struct RayCase {
+    V position;
+    V direction;
+  };
+  const RayCase outside[] = {
+      {{15.0, 0.0, 0.0}, {-1.0, 0.0, 0.0}},
+      {{0.0, 0.0, 26.0}, {0.0, 0.0, -1.0}},
+      {{15.0, 0.0, 26.0}, {-1.0, 0.0, -1.0}},
+      {{15.0, 0.0, 0.0}, {1.0, 0.0, 0.0}}};
+  for (const auto& ray : outside) {
+    const double safety = g4wgpu::tubs_safety_to_in_mm(tubs, ray.position);
+    const double distance = entry(ray.position, ray.direction);
+    if (!(safety >= 0.0) || !(safety <= distance + 1.0e-9)) {
+      std::cerr << "Tubs entry safety exceeds ray distance\\n";
+      return EXIT_FAILURE;
+    }
+  }
+  const RayCase inside[] = {
+      {{0.0, 0.0, 0.0}, {1.0, 0.0, 0.0}},
+      {{0.0, 0.0, 15.0}, {0.0, 0.0, 1.0}},
+      {{3.0, 4.0, 0.0}, {1.0, 1.0, 1.0}},
+      {{0.0, 0.0, -15.0}, {1.0, 0.0, -1.0}}};
+  for (const auto& ray : inside) {
+    const double safety = g4wgpu::tubs_safety_to_out_mm(tubs, ray.position);
+    const double distance = exit(ray.position, ray.direction);
+    if (!(safety >= 0.0) || !(safety <= distance + 1.0e-9)) {
+      std::cerr << "Tubs exit safety exceeds ray distance\\n";
+      return EXIT_FAILURE;
+    }
+  }
+
   const auto rejects = [](const auto& fn) {
     try {
       fn();
