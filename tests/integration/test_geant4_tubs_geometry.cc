@@ -86,5 +86,53 @@ int main() {
     }
   }
 
+
+  // Validate dimension scaling independently of direction-vector scaling.
+  // This exercises the portable CPU reference against Geant4 at three
+  // detector sizes without changing the production navigation path.
+  for (const double factor : {0.1, 1.0, 100.0}) {
+    const g4wgpu::PortableSolidTubs scaled{10.0 * factor, 20.0 * factor};
+    G4Tubs scaled_geant4(
+        "scaled_reference_solid_tubs", 0.0 * CLHEP::mm,
+        scaled.outer_radius_mm * CLHEP::mm,
+        scaled.half_length_z_mm * CLHEP::mm, 0.0, CLHEP::twopi);
+    const Ray scaled_external[] = {
+        {{15.0 * factor, 0.0, 0.0}, {-1.0, 0.0, 0.0}},
+        {{0.0, 0.0, 30.0 * factor}, {0.0, 0.0, -1.0}},
+        {{15.0 * factor, 0.0, 30.0 * factor}, {-1.0, 0.0, -1.0}}};
+    const Ray scaled_internal[] = {
+        {{0.0, 0.0, 0.0}, {1.0, 0.0, 0.0}},
+        {{0.0, 0.0, 15.0 * factor}, {0.0, 0.0, 1.0}},
+        {{3.0 * factor, 4.0 * factor, 0.0}, {1.0, 0.0, 1.0}}};
+    for (const Ray& ray : scaled_external) {
+      const G4ThreeVector p(ray.position.x * CLHEP::mm,
+                            ray.position.y * CLHEP::mm,
+                            ray.position.z * CLHEP::mm);
+      const G4ThreeVector v(ray.direction.x, ray.direction.y,
+                            ray.direction.z);
+      const double expected = scaled_geant4.DistanceToIn(p, v.unit()) / CLHEP::mm;
+      const double actual = g4wgpu::tubs_distance_to_in_mm(
+          scaled, ray.position, ray.direction);
+      if (!same_distance(actual, expected)) {
+        std::cerr << "scaled Tubs entry mismatch at factor " << factor << '\n';
+        return EXIT_FAILURE;
+      }
+    }
+    for (const Ray& ray : scaled_internal) {
+      const G4ThreeVector p(ray.position.x * CLHEP::mm,
+                            ray.position.y * CLHEP::mm,
+                            ray.position.z * CLHEP::mm);
+      const G4ThreeVector v(ray.direction.x, ray.direction.y,
+                            ray.direction.z);
+      const double expected = scaled_geant4.DistanceToOut(p, v.unit()) / CLHEP::mm;
+      const double actual = g4wgpu::tubs_distance_to_out_mm(
+          scaled, ray.position, ray.direction);
+      if (!same_distance(actual, expected)) {
+        std::cerr << "scaled Tubs exit mismatch at factor " << factor << '\n';
+        return EXIT_FAILURE;
+      }
+    }
+  }
+
   return EXIT_SUCCESS;
 }
