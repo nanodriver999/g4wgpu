@@ -103,30 +103,39 @@ int main() {
       {{0,0,99.999}, {0,0,1}, Kind::world_exit, 0u},
   };
 
+  // Geant4 normalizes track directions. Verify the portable reference
+  // preserves the same physical boundary for positive ray rescaling.
+  // Keep the independent Geant4 oracle in every comparison.
   for (std::size_t i = 0; i < cases.size(); ++i) {
     const auto& item = cases[i];
-    const auto portable = g4wgpu::flat_box_next_boundary_mm(
-        scene, item.position, item.direction);
-    const auto p = item.position;
-    const auto d = item.direction;
-    const G4ThreeVector position(
-        p.x * CLHEP::mm, p.y * CLHEP::mm, p.z * CLHEP::mm);
-    const G4ThreeVector direction =
-        G4ThreeVector(d.x, d.y, d.z).unit();
-    G4Track track(new G4DynamicParticle(
-                      G4Gamma::GammaDefinition(), direction,
-                      1.0 * CLHEP::MeV),
-                  0.0, position);
-    const double geant4 = g4wgpu::geant4_boundary_distance_mm(track);
-    if (portable.kind != item.expected_kind ||
-        portable.daughter_id != item.expected_id ||
-        !std::isfinite(geant4) ||
-        std::fabs(portable.distance_mm - geant4) > 1.0e-6) {
-      std::cerr << "flat Box vs Geant4 next-boundary mismatch at "
-                << i << ": CPU=" << portable.distance_mm
-                << " Geant4=" << geant4 << '\n';
-      delete run_manager;
-      return EXIT_FAILURE;
+    for (const double scale : {0.5, 1.0, 3.0}) {
+      const V scaled_direction{
+          item.direction.x * scale,
+          item.direction.y * scale,
+          item.direction.z * scale};
+      const auto portable = g4wgpu::flat_box_next_boundary_mm(
+          scene, item.position, scaled_direction);
+      const auto p = item.position;
+      const G4ThreeVector position(
+          p.x * CLHEP::mm, p.y * CLHEP::mm, p.z * CLHEP::mm);
+      const G4ThreeVector direction = G4ThreeVector(
+          scaled_direction.x, scaled_direction.y, scaled_direction.z).unit();
+      G4Track track(new G4DynamicParticle(
+                        G4Gamma::GammaDefinition(), direction,
+                        1.0 * CLHEP::MeV),
+                    0.0, position);
+      const double geant4 = g4wgpu::geant4_boundary_distance_mm(track);
+      if (portable.kind != item.expected_kind ||
+          portable.daughter_id != item.expected_id ||
+          !std::isfinite(geant4) ||
+          std::fabs(portable.distance_mm - geant4) > 1.0e-6) {
+        std::cerr << "flat Box vs Geant4 next-boundary mismatch at "
+                  << i << " direction scale=" << scale
+                  << ": CPU=" << portable.distance_mm
+                  << " Geant4=" << geant4 << '\n';
+        delete run_manager;
+        return EXIT_FAILURE;
+      }
     }
   }
 
