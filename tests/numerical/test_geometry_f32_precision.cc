@@ -133,5 +133,54 @@ int main() {
     }
   }
 
+
+  // Tubs-only f32 staging preflight at detector scales. This exercises
+  // representable, non-tangent rays and does not claim GPU/Geant4 equivalence.
+  // Use scale-relative geometry so f32 input rounding is assessed separately
+  // from the WGSL arithmetic and near-boundary acceptance gates.
+  for (const double scale : {0.1, 1.0, 100.0}) {
+    const g4wgpu::PortableSolidTubs scaled{10.0 * scale, 20.0 * scale};
+    struct TubsRay {
+      g4wgpu::TubsVector3 p;
+      g4wgpu::TubsVector3 v;
+      bool entering;
+    };
+    const std::array<TubsRay, 6> rays{{
+        {{15.125 * scale, 0.0, 0.0}, {-1.0, 0.0, 0.0}, true},
+        {{0.0, 0.0, 25.125 * scale}, {0.0, 0.0, -1.0}, true},
+        {{15.125 * scale, 0.0, 25.125 * scale}, {-1.0, 0.0, -1.0}, true},
+        {{0.0, 0.0, 0.0}, {1.0, 0.0, 0.0}, false},
+        {{3.125 * scale, 4.125 * scale, 0.0}, {1.0, 1.0, 1.0}, false},
+        {{0.0, 0.0, 5.125 * scale}, {0.0, 0.0, 1.0}, false},
+    }};
+    const g4wgpu::PortableSolidTubs quantized{
+        f32(scaled.outer_radius_mm), f32(scaled.half_length_z_mm)};
+    for (unsigned i = 0; i < rays.size(); ++i) {
+      const auto& r = rays[i];
+      const g4wgpu::TubsVector3 p{
+          f32(r.p.x), f32(r.p.y), f32(r.p.z)};
+      const g4wgpu::TubsVector3 v{
+          f32(r.v.x), f32(r.v.y), f32(r.v.z)};
+      const double reference = r.entering
+          ? g4wgpu::tubs_distance_to_in_mm(scaled, r.p, r.v)
+          : g4wgpu::tubs_distance_to_out_mm(scaled, r.p, r.v);
+      const double staged = r.entering
+          ? g4wgpu::tubs_distance_to_in_mm(quantized, p, v)
+          : g4wgpu::tubs_distance_to_out_mm(quantized, p, v);
+      if (!check("tubs-scaled", r.entering ? "in" : "out",
+                 reference, staged, i) ||
+          !check("tubs-scaled", r.entering ? "safety-in" : "safety-out",
+                 r.entering
+                     ? g4wgpu::tubs_safety_to_in_mm(scaled, r.p)
+                     : g4wgpu::tubs_safety_to_out_mm(scaled, r.p),
+                 r.entering
+                     ? g4wgpu::tubs_safety_to_in_mm(quantized, p)
+                     : g4wgpu::tubs_safety_to_out_mm(quantized, p),
+                 i)) {
+        return EXIT_FAILURE;
+      }
+    }
+  }
+
   return EXIT_SUCCESS;
 }
