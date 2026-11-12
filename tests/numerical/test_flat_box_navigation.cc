@@ -102,7 +102,7 @@ int main() {
                Kind::daughter_entry, 0.001, 22u) ||
       !matches(next({34.999,0,0}, {1,0,0}),
                Kind::daughter_exit, 0.001, 22u) ||
-      !matches(next({-26.999,0,0}, {-1,0,0}),
+      !matches(next({-42.999,0,0}, {-1,0,0}),
                Kind::daughter_exit, 0.001, 11u) ||
       !matches(next({0,0,99.999}, {0,0,1}),
                Kind::world_exit, 0.001, 0u)) {
