@@ -100,6 +100,12 @@ int main() {
       {{0,0,0}, {1,0,1}, Kind::world_exit, 0u},
       {{25,0,0}, {0,1,0}, Kind::daughter_exit, 22u},
       {{-35,0,0}, {0,0,-1}, Kind::daughter_exit, 11u},
+      // Diagonal exits from daughter interiors: the nearest side face
+      // wins even when another face is also approached.
+      {{25,0,0}, {1,1,0}, Kind::daughter_exit, 22u},
+      {{25,0,0}, {-1,-1,0}, Kind::daughter_exit, 22u},
+      {{-35,0,0}, {1,0,1}, Kind::daughter_exit, 11u},
+      {{-35,0,0}, {-1,0,-1}, Kind::daughter_exit, 11u},
       // 1 micron of nonzero clearance from the next face. These rays
       // exercise the independent Geant4 navigator oracle, not just the
       // portable CPU implementation (surface starts remain excluded).
