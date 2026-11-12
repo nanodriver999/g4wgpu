@@ -31,6 +31,7 @@ add_library(g4wgpu_core
     src/geometry/BoxGeometry.cc
     src/geometry/OrbGeometry.cc
     src/geometry/TubsGeometry.cc
+    src/geometry/FlatBoxNavigation.cc
     src/cpu/CpuBackend.cc
 )
 
@@ -278,6 +279,17 @@ if(G4WGPU_ENABLE_GEANT4)
             COMMAND g4wgpu_geant4_box_geometry_test
         )
 
+        add_executable(g4wgpu_geant4_flat_box_navigation_test
+            tests/integration/test_geant4_flat_box_navigation.cc
+        )
+        target_link_libraries(g4wgpu_geant4_flat_box_navigation_test
+            PRIVATE g4wgpu::geant4 ${Geant4_LIBRARIES}
+        )
+        add_test(
+            NAME g4wgpu.geant4_flat_box_navigation
+            COMMAND g4wgpu_geant4_flat_box_navigation_test
+        )
+
         add_executable(g4wgpu_geant4_boundary_distance_test
             tests/integration/test_geant4_boundary_distance.cc
         )
@@ -468,6 +480,16 @@ if(G4WGPU_BUILD_TESTING)
     add_test(
         NAME g4wgpu.orb_geometry
         COMMAND g4wgpu_orb_geometry_test
+    )
+
+    add_executable(g4wgpu_flat_box_navigation_test
+        tests/numerical/test_flat_box_navigation.cc
+    )
+    target_link_libraries(g4wgpu_flat_box_navigation_test
+        PRIVATE g4wgpu::core)
+    add_test(
+        NAME g4wgpu.flat_box_navigation
+        COMMAND g4wgpu_flat_box_navigation_test
     )
 
     add_executable(g4wgpu_box_geometry_test
