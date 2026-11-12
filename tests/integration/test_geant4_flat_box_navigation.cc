@@ -100,6 +100,12 @@ int main() {
       {{0,0,0}, {1,0,1}, Kind::world_exit, 0u},
       {{25,0,0}, {0,1,0}, Kind::daughter_exit, 22u},
       {{-35,0,0}, {0,0,-1}, Kind::daughter_exit, 11u},
+      // Offset rays probe daughter face extents independently of x distance.
+      // The first and last enter daughter 22; the middle two miss both.
+      {{0,5,0}, {1,0,0}, Kind::daughter_entry, 22u},
+      {{0,9,0}, {1,0,0}, Kind::world_exit, 0u},
+      {{0,0,13}, {-1,0,0}, Kind::world_exit, 0u},
+      {{0,0,13}, {1,0,0}, Kind::daughter_entry, 22u},
       // Diagonal exits from daughter interiors: the nearest side face
       // wins even when another face is also approached.
       {{25,0,0}, {1,1,0}, Kind::daughter_exit, 22u},
