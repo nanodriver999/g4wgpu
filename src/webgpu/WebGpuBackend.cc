@@ -439,6 +439,43 @@ fn tubs_entry_main(@builtin(global_invocation_id) id: vec3<u32>) {
   distances[index] = max(0.0, entry);
 }
 
+// DistanceToOut of a solid full-azimuth Tubs, for inside/on-surface
+// origins. We intersect the positive exit root of the radial quadratic
+// with the first z end cap. F64 containment is validated on the CPU
+// before any f32 staging; this WGSL entry point is non-authoritative.
+@compute @workgroup_size(128)
+fn tubs_exit_main(@builtin(global_invocation_id) id: vec3<u32>) {
+  let index = id.x;
+  if (index >= params.count) {
+    return;
+  }
+
+  let ray = rays[index];
+  let p = vec3<f32>(ray.px, ray.py, ray.pz);
+  let d = vec3<f32>(ray.dx, ray.dy, ray.dz);
+  let radius = params.half_x;
+  let half_z = params.half_z;
+  let infinity = bitcast<f32>(0x7f800000u);
+
+  var radial_exit = infinity;
+  let a = dot(d.xy, d.xy);
+  if (a > 0.0) {
+    let radial = length(p.xy);
+    let b = dot(p.xy, d.xy);
+    let c = (radial - radius) * (radial + radius);
+    let discriminant = max(0.0, b * b - a * c);
+    radial_exit = (-b + sqrt(discriminant)) / a;
+  }
+
+  var endcap_exit = infinity;
+  if (d.z > 0.0) {
+    endcap_exit = (half_z - p.z) / d.z;
+  } else if (d.z < 0.0) {
+    endcap_exit = (-half_z - p.z) / d.z;
+  }
+  distances[index] = max(0.0, min(radial_exit, endcap_exit));
+}
+
 // Entry ray intersection with a full sphere centered at the local origin.
 // Non-grazing external rays use the stable near-root form of the quadratic.
 // A tangent does not enter the interior; inside/on-surface starts yield 0.
@@ -1254,6 +1291,28 @@ std::vector<double> WebGpuBackend::tubs_distance_to_in_batch(
   }
   return impl_->box_distance_batch(
       staging_box, staged, "tubs_entry_main", false);
+}
+
+std::vector<double> WebGpuBackend::tubs_distance_to_out_batch(
+    const PortableSolidTubs& tubs, const std::vector<TubsRay>& rays) {
+  // The enclosing Box is NOT a valid substitute for a radial Tubs
+  // containment test. Check every original f64 origin/direction using
+  // the portable CPU reference before narrowing inputs for the GPU.
+  (void)tubs_safety_to_out_mm(tubs, TubsVector3{});
+  const AxisAlignedBox staging_box{{
+      tubs.outer_radius_mm, tubs.outer_radius_mm, tubs.half_length_z_mm}};
+  std::vector<BoxRay> staged;
+  staged.reserve(rays.size());
+  for (const TubsRay& ray : rays) {
+    (void)tubs_distance_to_out_mm(tubs, ray.position_mm, ray.direction);
+    staged.push_back(BoxRay{
+        {ray.position_mm.x, ray.position_mm.y, ray.position_mm.z},
+        {ray.direction.x, ray.direction.y, ray.direction.z}});
+  }
+  // Containment was validated against Tubs. Do not request Box-only
+  // containment checking in the shared f32 staging/dispatch helper.
+  return impl_->box_distance_batch(
+      staging_box, staged, "tubs_exit_main", false);
 }
 
 std::vector<double> WebGpuBackend::orb_distance_to_in_batch(

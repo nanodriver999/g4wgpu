@@ -70,6 +70,12 @@ class WebGpuBackend final : public ComputeBackend, public PhysicsBackend {
   std::vector<double> tubs_distance_to_in_batch(
       const PortableSolidTubs& tubs, const std::vector<TubsRay>& rays);
 
+  // Experimental full-azimuth solid Tubs exit distance (mm).
+  // Origin must be inside/on Tubs, not merely its enclosing Box.
+  // This does not replace the Geant4 navigator or CPU fallback.
+  std::vector<double> tubs_distance_to_out_batch(
+      const PortableSolidTubs& tubs, const std::vector<TubsRay>& rays);
+
   // Standalone, non-authoritative full-sphere ray entry distances in mm.
   // A miss is positive infinity; GPU f32 rounding is tested vs CPU f64.
   std::vector<double> orb_distance_to_in_batch(
