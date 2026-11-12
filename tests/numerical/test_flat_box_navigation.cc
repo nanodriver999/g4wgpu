@@ -1,5 +1,6 @@
 #include "g4wgpu/FlatBoxNavigation.hh"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -69,6 +70,29 @@ int main() {
                Kind::daughter_exit, 8.0, 11u)) {
     std::cerr << "flat Box next-boundary routing mismatch\n";
     return EXIT_FAILURE;
+  }
+
+  // Selection must depend on geometry, not daughter storage order or
+  // a positive rescaling of the direction vector.
+  Scene reversed = reference_scene();
+  std::swap(reversed.daughters[0], reversed.daughters[1]);
+  const V positions[] = {{0,0,0}, {60,0,0}, {-35,0,0},
+                         {25,0,0}, {-50,30,0}, {0,0,30}};
+  const V directions[] = {{1,0,0}, {-1,0,0}, {0,1,0},
+                          {0,0,-1}, {1,0.25,0}, {-1,0,-0.5}};
+  for (const V p : positions) {
+    for (const V d : directions) {
+      const auto expected = next(p, d);
+      const auto reordered = g4wgpu::flat_box_next_boundary_mm(reversed, p, d);
+      const auto scaled = next(p, {d.x * 7.0, d.y * 7.0, d.z * 7.0});
+      if (!matches(reordered, expected.kind, expected.distance_mm,
+                   expected.daughter_id) ||
+          !matches(scaled, expected.kind, expected.distance_mm,
+                   expected.daughter_id)) {
+        std::cerr << "flat Box order/direction scale invariance mismatch\\n";
+        return EXIT_FAILURE;
+      }
+    }
   }
 
   Scene world_only;
