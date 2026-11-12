@@ -132,7 +132,7 @@ int main() {
         std::cerr << "flat Box vs Geant4 next-boundary mismatch at "
                   << i << " direction scale=" << scale
                   << ": CPU=" << portable.distance_mm
-                  << " Geant4=" << geant4 << '\\n';
+                  << " Geant4=" << geant4 << '\n';
         delete run_manager;
         return EXIT_FAILURE;
       }
