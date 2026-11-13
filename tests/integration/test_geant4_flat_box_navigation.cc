@@ -125,6 +125,12 @@ int main() {
       {{-35,0,11.999}, {0,0,1}, Kind::daughter_exit, 11u},
       {{99.999,0,0}, {1,0,0}, Kind::world_exit, 0u},
       {{0,-99.999,0}, {0,-1,0}, Kind::world_exit, 0u},
+      // Opposite-face clearances verify signed directions on the remaining
+      // world and daughter axes against the independent Geant4 navigator.
+      {{25,-7.999,0}, {0,-1,0}, Kind::daughter_exit, 22u},
+      {{-35,0,-11.999}, {0,0,-1}, Kind::daughter_exit, 11u},
+      {{-99.999,0,0}, {-1,0,0}, Kind::world_exit, 0u},
+      {{0,99.999,0}, {0,1,0}, Kind::world_exit, 0u},
   };
 
   // Geant4 normalizes track directions. Verify the portable reference
