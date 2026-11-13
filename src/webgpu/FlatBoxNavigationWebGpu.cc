@@ -164,4 +164,77 @@ std::vector<FlatBoundary> flat_box_next_boundary_webgpu_batch(
   if (stats != nullptr) *stats = diagnostics;
   return selected;
 }
+
+std::vector<FlatBoundary> flat_box_next_boundary_webgpu_fused_batch(
+    WebGpuBackend& gpu,
+    const FlatBoxScene& scene,
+    const std::vector<BoxRay>& rays,
+    FlatBoxGpuBatchStats* stats,
+    const double absolute_tolerance_mm,
+    const double relative_tolerance) {
+  if (!std::isfinite(absolute_tolerance_mm) ||
+      !std::isfinite(relative_tolerance) ||
+      absolute_tolerance_mm < 0.0 || relative_tolerance < 0.0) {
+    throw std::invalid_argument(
+        "fused flat Box tolerances must be finite and nonnegative");
+  }
+  FlatBoxGpuBatchStats diagnostics;
+
+  if (rays.empty()) {
+    (void)flat_box_next_boundary_mm(
+        scene, BoxVector3{}, BoxVector3{1.0, 0.0, 0.0});
+    if (stats != nullptr) *stats = diagnostics;
+    return {};
+  }
+
+  // The independent f64 CPU reference still validates the complete
+  // scene, each direction, and every ray. This is deliberately not
+  // a performance comparison or an authoritative navigator.
+  std::vector<FlatBoundary> reference;
+  reference.reserve(rays.size());
+  for (const auto& ray : rays) {
+    reference.push_back(flat_box_next_boundary_mm(
+        scene, ray.position_mm, ray.direction));
+  }
+
+  bool supported = f32_box(scene.world) &&
+                   scene.daughters.size() <= 64u &&
+                   rays.size() <= 8192u;
+  for (const auto& daughter : scene.daughters) {
+    supported = supported && f32_box(daughter.box) &&
+                f32_position(daughter.center_mm);
+  }
+  for (const auto& ray : rays) {
+    supported = supported && f32_position(ray.position_mm);
+    for (const auto& daughter : scene.daughters) {
+      supported = supported && f32_position(
+          local(ray.position_mm, daughter.center_mm));
+    }
+  }
+  if (!supported) {
+    diagnostics.cpu_reference_fallbacks = rays.size();
+    if (stats != nullptr) *stats = diagnostics;
+    return reference;
+  }
+
+  std::vector<FlatBoundary> candidates =
+      gpu.flat_box_fused_candidates_batch(scene, rays);
+  diagnostics.gpu_box_dispatches = 1u;
+  diagnostics.gpu_fused_dispatches = 1u;
+  if (candidates.size() != rays.size()) {
+    throw std::runtime_error(
+        "fused flat Box GPU returned wrong ray count");
+  }
+
+  for (std::size_t i = 0; i < rays.size(); ++i) {
+    if (!agrees(candidates[i], reference[i],
+                absolute_tolerance_mm, relative_tolerance)) {
+      candidates[i] = reference[i];
+      ++diagnostics.cpu_reference_fallbacks;
+    }
+  }
+  if (stats != nullptr) *stats = diagnostics;
+  return candidates;
+}
+
 }  // namespace g4wgpu

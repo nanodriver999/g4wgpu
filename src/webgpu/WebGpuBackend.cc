@@ -537,10 +537,174 @@ fn orb_exit_main(@builtin(global_invocation_id) id: vec3<u32>) {
 }
 )WGSL";
 
+
+struct GpuFlatBox {
+  float cx;
+  float cy;
+  float cz;
+  std::uint32_t id;
+  float hx;
+  float hy;
+  float hz;
+  float pad;
+};
+static_assert(sizeof(GpuFlatBox) == 32);
+
+struct GpuFlatResult {
+  float distance_mm;
+  std::uint32_t kind;
+  std::uint32_t daughter_id;
+  std::uint32_t pad;
+};
+static_assert(sizeof(GpuFlatResult) == 16);
+
+struct GpuFlatParams {
+  std::uint32_t ray_count;
+  std::uint32_t shape_count;
+  std::uint32_t pad0;
+  std::uint32_t pad1;
+};
+static_assert(sizeof(GpuFlatParams) == 16);
+
+// The standalone flattened Box-only experiment performs *both* candidate
+// distance and next-boundary selection in one shader dispatch. The CPU
+// reference still validates every ray and retains final authority.
+constexpr const char* kFlatBoxFusedShader = R"WGSL(
+struct Ray {
+  px: f32,
+  py: f32,
+  pz: f32,
+  pad0: f32,
+  dx: f32,
+  dy: f32,
+  dz: f32,
+  pad1: f32,
+}
+
+struct Shape {
+  cx: f32,
+  cy: f32,
+  cz: f32,
+  id: u32,
+  hx: f32,
+  hy: f32,
+  hz: f32,
+  pad: f32,
+}
+
+struct Result {
+  distance_mm: f32,
+  kind: u32,
+  daughter_id: u32,
+  pad: u32,
+}
+
+struct Params {
+  ray_count: u32,
+  shape_count: u32,
+  pad0: u32,
+  pad1: u32,
+}
+
+@group(0) @binding(0) var<storage, read> rays: array<Ray>;
+@group(0) @binding(1) var<storage, read> shapes: array<Shape>;
+@group(0) @binding(2) var<storage, read_write> results: array<Result>;
+@group(0) @binding(3) var<uniform> params: Params;
+
+fn contains(p: vec3<f32>, h: vec3<f32>) -> bool {
+  return all(abs(p) <= h);
+}
+
+// Return the first outward crossing of the Box along a unit ray.
+fn exit_distance(p: vec3<f32>, d: vec3<f32>, h: vec3<f32>) -> f32 {
+  var t = bitcast<f32>(0x7f800000u);
+  for (var axis = 0u; axis < 3u; axis = axis + 1u) {
+    if (d[axis] > 0.0) {
+      t = min(t, (h[axis] - p[axis]) / d[axis]);
+    } else if (d[axis] < 0.0) {
+      t = min(t, (-h[axis] - p[axis]) / d[axis]);
+    }
+  }
+  return max(0.0, t);
+}
+
+fn entry_distance(p: vec3<f32>, d: vec3<f32>, h: vec3<f32>) -> f32 {
+  let inf = bitcast<f32>(0x7f800000u);
+  var near_t = -inf;
+  var far_t = inf;
+  for (var axis = 0u; axis < 3u; axis = axis + 1u) {
+    if (d[axis] == 0.0) {
+      if (p[axis] < -h[axis] || p[axis] > h[axis]) {
+        return inf;
+      }
+    } else {
+      let a = (-h[axis] - p[axis]) / d[axis];
+      let b = (h[axis] - p[axis]) / d[axis];
+      near_t = max(near_t, min(a, b));
+      far_t = min(far_t, max(a, b));
+      if (near_t > far_t) {
+        return inf;
+      }
+    }
+  }
+  if (far_t < 0.0) {
+    return inf;
+  }
+  return max(0.0, near_t);
+}
+
+@compute @workgroup_size(128)
+fn main(@builtin(global_invocation_id) index: vec3<u32>) {
+  let i = index.x;
+  if (i >= params.ray_count) {
+    return;
+  }
+
+  let ray = rays[i];
+  let p = vec3<f32>(ray.px, ray.py, ray.pz);
+  let d = vec3<f32>(ray.dx, ray.dy, ray.dz);
+  let world = shapes[0u];
+  let world_half = vec3<f32>(world.hx, world.hy, world.hz);
+  var best = Result(exit_distance(p, d, world_half), 0u, 0u, 0u);
+
+  // The original CPU contract checks daughter containment first.
+  // There can be at most one containing daughter in a validated scene.
+  for (var index_shape = 1u;
+       index_shape < params.shape_count;
+       index_shape = index_shape + 1u) {
+    let daughter = shapes[index_shape];
+    let center = vec3<f32>(daughter.cx, daughter.cy, daughter.cz);
+    let half = vec3<f32>(daughter.hx, daughter.hy, daughter.hz);
+    let local = p - center;
+    if (contains(local, half)) {
+      results[i] = Result(
+          exit_distance(local, d, half), 2u, daughter.id, 0u);
+      return;
+    }
+  }
+
+  // Select the nearest daughter entry. Strict < preserves the
+  // CPU reference's world-first and daughter-order tie policy.
+  for (var index_shape = 1u;
+       index_shape < params.shape_count;
+       index_shape = index_shape + 1u) {
+    let daughter = shapes[index_shape];
+    let center = vec3<f32>(daughter.cx, daughter.cy, daughter.cz);
+    let half = vec3<f32>(daughter.hx, daughter.hy, daughter.hz);
+    let distance = entry_distance(p - center, d, half);
+    if (distance < best.distance_mm) {
+      best = Result(distance, 1u, daughter.id, 0u);
+    }
+  }
+  results[i] = best;
+}
+)WGSL";
+
 struct DispatchResources {
   WGPUShaderModule shader = nullptr;
   WGPUComputePipeline pipeline = nullptr;
   WGPUBuffer x_buffer = nullptr;
+  WGPUBuffer geometry_buffer = nullptr;
   WGPUBuffer y_buffer = nullptr;
   WGPUBuffer params_buffer = nullptr;
   WGPUBuffer readback_buffer = nullptr;
@@ -573,6 +737,9 @@ struct DispatchResources {
     }
     if (x_buffer != nullptr) {
       wgpuBufferRelease(x_buffer);
+    }
+    if (geometry_buffer != nullptr) {
+      wgpuBufferRelease(geometry_buffer);
     }
     if (pipeline != nullptr) {
       wgpuComputePipelineRelease(pipeline);
@@ -1116,6 +1283,254 @@ class WebGpuBackend::Impl {
     return distances;
   }
 
+
+  std::vector<FlatBoundary> flat_box_fused_candidates_batch(
+      const FlatBoxScene& scene,
+      const std::vector<BoxRay>& rays) {
+    constexpr std::size_t kMaxRays = 8192u;
+    constexpr std::size_t kMaxDaughters = 64u;
+    if (rays.size() > kMaxRays ||
+        scene.daughters.size() > kMaxDaughters) {
+      throw std::overflow_error(
+          "fused flat Box batch exceeds bounded prototype limits");
+    }
+
+    // The public experimental API still validates all original f64
+    // geometry/rays; the Geant4 navigator remains authoritative.
+    if (rays.empty()) {
+      (void)flat_box_next_boundary_mm(
+          scene, BoxVector3{}, BoxVector3{1.0, 0.0, 0.0});
+      return {};
+    }
+    for (const auto& ray : rays) {
+      (void)flat_box_next_boundary_mm(
+          scene, ray.position_mm, ray.direction);
+    }
+
+    const auto narrow = [](const double x) -> float {
+      if (!std::isfinite(x) ||
+          std::fabs(x) >
+              static_cast<double>(std::numeric_limits<float>::max())) {
+        throw std::invalid_argument(
+            "flat Box GPU input is not finite f32");
+      }
+      const float y = static_cast<float>(x);
+      if (!std::isfinite(y)) {
+        throw std::invalid_argument("flat Box f32 conversion failed");
+      }
+      return y;
+    };
+
+    std::vector<GpuFlatBox> shapes;
+    shapes.reserve(scene.daughters.size() + 1u);
+    const auto world = scene.world.half_lengths_mm;
+    shapes.push_back(GpuFlatBox{
+        0.0f, 0.0f, 0.0f, 0u,
+        narrow(world.x), narrow(world.y), narrow(world.z), 0.0f});
+    for (const auto& item : scene.daughters) {
+      const auto c = item.center_mm;
+      const auto h = item.box.half_lengths_mm;
+      shapes.push_back(GpuFlatBox{
+          narrow(c.x), narrow(c.y), narrow(c.z), item.id,
+          narrow(h.x), narrow(h.y), narrow(h.z), 0.0f});
+    }
+    for (const auto& shape : shapes) {
+      if (!(shape.hx > 0.0f) || !(shape.hy > 0.0f) ||
+          !(shape.hz > 0.0f)) {
+        throw std::invalid_argument(
+            "flat Box shape dimensions underflow f32");
+      }
+    }
+
+    std::vector<GpuBoxRay> staged;
+    staged.reserve(rays.size());
+    for (const auto& ray : rays) {
+      const auto p = ray.position_mm;
+      const auto d = ray.direction;
+      const double norm = std::hypot(d.x, d.y, d.z);
+      if (!(norm > 0.0) || !std::isfinite(norm)) {
+        throw std::invalid_argument(
+            "flat Box GPU direction must be finite and nonzero");
+      }
+      staged.push_back(GpuBoxRay{
+          narrow(p.x), narrow(p.y), narrow(p.z), 0.0f,
+          narrow(d.x / norm), narrow(d.y / norm),
+          narrow(d.z / norm), 0.0f});
+    }
+
+    const GpuFlatParams params{
+        static_cast<std::uint32_t>(rays.size()),
+        static_cast<std::uint32_t>(shapes.size()), 0u, 0u};
+    const std::uint64_t ray_bytes =
+        staged.size() * sizeof(GpuBoxRay);
+    const std::uint64_t shape_bytes =
+        shapes.size() * sizeof(GpuFlatBox);
+    const std::uint64_t output_bytes =
+        rays.size() * sizeof(GpuFlatResult);
+
+    DispatchResources resources;
+    resources.shader = create_shader_module(
+        device, kFlatBoxFusedShader, "g4wgpu_flat_box_fused_shader");
+    if (resources.shader == nullptr) {
+      throw std::runtime_error("failed to create flat Box shader");
+    }
+    WGPUComputeState compute = WGPU_COMPUTE_STATE_INIT;
+    compute.module = resources.shader;
+    compute.entryPoint = string_view("main");
+    WGPUComputePipelineDescriptor pipeline_descriptor =
+        WGPU_COMPUTE_PIPELINE_DESCRIPTOR_INIT;
+    pipeline_descriptor.label =
+        string_view("g4wgpu_flat_box_fused_pipeline");
+    pipeline_descriptor.compute = compute;
+    resources.pipeline = wgpuDeviceCreateComputePipeline(
+        device, &pipeline_descriptor);
+    if (resources.pipeline == nullptr) {
+      throw std::runtime_error(
+          "failed to create flat Box compute pipeline");
+    }
+
+    resources.x_buffer = create_buffer(
+        device, "g4wgpu_flat_box_rays", ray_bytes,
+        WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    resources.geometry_buffer = create_buffer(
+        device, "g4wgpu_flat_box_shapes", shape_bytes,
+        WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    resources.y_buffer = create_buffer(
+        device, "g4wgpu_flat_box_results", output_bytes,
+        WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
+    resources.params_buffer = create_buffer(
+        device, "g4wgpu_flat_box_params", sizeof(params),
+        WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst);
+    resources.readback_buffer = create_buffer(
+        device, "g4wgpu_flat_box_readback", output_bytes,
+        WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst);
+    if (resources.x_buffer == nullptr ||
+        resources.geometry_buffer == nullptr ||
+        resources.y_buffer == nullptr ||
+        resources.params_buffer == nullptr ||
+        resources.readback_buffer == nullptr) {
+      throw std::runtime_error("failed to allocate flat Box GPU buffers");
+    }
+
+    resources.layout = wgpuComputePipelineGetBindGroupLayout(
+        resources.pipeline, 0);
+    if (resources.layout == nullptr) {
+      throw std::runtime_error("flat Box bind group layout unavailable");
+    }
+    WGPUBindGroupEntry entries[4] = {
+        WGPU_BIND_GROUP_ENTRY_INIT, WGPU_BIND_GROUP_ENTRY_INIT,
+        WGPU_BIND_GROUP_ENTRY_INIT, WGPU_BIND_GROUP_ENTRY_INIT};
+    entries[0].binding = 0u;
+    entries[0].buffer = resources.x_buffer;
+    entries[0].size = ray_bytes;
+    entries[1].binding = 1u;
+    entries[1].buffer = resources.geometry_buffer;
+    entries[1].size = shape_bytes;
+    entries[2].binding = 2u;
+    entries[2].buffer = resources.y_buffer;
+    entries[2].size = output_bytes;
+    entries[3].binding = 3u;
+    entries[3].buffer = resources.params_buffer;
+    entries[3].size = sizeof(params);
+
+    WGPUBindGroupDescriptor bind_desc = WGPU_BIND_GROUP_DESCRIPTOR_INIT;
+    bind_desc.label = string_view("g4wgpu_flat_box_bind_group");
+    bind_desc.layout = resources.layout;
+    bind_desc.entryCount = 4u;
+    bind_desc.entries = entries;
+    resources.bind_group = wgpuDeviceCreateBindGroup(device, &bind_desc);
+    if (resources.bind_group == nullptr) {
+      throw std::runtime_error("flat Box bind group creation failed");
+    }
+
+    wgpuQueueWriteBuffer(
+        queue, resources.x_buffer, 0, staged.data(), ray_bytes);
+    wgpuQueueWriteBuffer(
+        queue, resources.geometry_buffer, 0,
+        shapes.data(), shape_bytes);
+    wgpuQueueWriteBuffer(
+        queue, resources.params_buffer, 0, &params, sizeof(params));
+
+    WGPUCommandEncoderDescriptor encoder_desc =
+        WGPU_COMMAND_ENCODER_DESCRIPTOR_INIT;
+    encoder_desc.label = string_view("g4wgpu_flat_box_encoder");
+    resources.encoder = wgpuDeviceCreateCommandEncoder(
+        device, &encoder_desc);
+    if (resources.encoder == nullptr) {
+      throw std::runtime_error("flat Box encoder creation failed");
+    }
+    WGPUComputePassDescriptor pass_desc =
+        WGPU_COMPUTE_PASS_DESCRIPTOR_INIT;
+    pass_desc.label = string_view("g4wgpu_flat_box_pass");
+    WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(
+        resources.encoder, &pass_desc);
+    if (pass == nullptr) {
+      throw std::runtime_error("flat Box compute pass creation failed");
+    }
+    wgpuComputePassEncoderSetPipeline(pass, resources.pipeline);
+    wgpuComputePassEncoderSetBindGroup(
+        pass, 0u, resources.bind_group, 0u, nullptr);
+    const std::uint32_t workgroups =
+        static_cast<std::uint32_t>((rays.size() + 127u) / 128u);
+    wgpuComputePassEncoderDispatchWorkgroups(
+        pass, workgroups, 1u, 1u);
+    wgpuComputePassEncoderEnd(pass);
+    wgpuComputePassEncoderRelease(pass);
+
+    wgpuCommandEncoderCopyBufferToBuffer(
+        resources.encoder, resources.y_buffer, 0u,
+        resources.readback_buffer, 0u, output_bytes);
+    WGPUCommandBufferDescriptor command_desc =
+        WGPU_COMMAND_BUFFER_DESCRIPTOR_INIT;
+    command_desc.label = string_view("g4wgpu_flat_box_command");
+    resources.command_buffer = wgpuCommandEncoderFinish(
+        resources.encoder, &command_desc);
+    if (resources.command_buffer == nullptr) {
+      throw std::runtime_error("flat Box command creation failed");
+    }
+    wgpuQueueSubmit(queue, 1u, &resources.command_buffer);
+
+    BufferMapState map_state;
+    WGPUBufferMapCallbackInfo callback =
+        WGPU_BUFFER_MAP_CALLBACK_INFO_INIT;
+    callback.mode = WGPUCallbackMode_AllowProcessEvents;
+    callback.callback = on_buffer_map;
+    callback.userdata1 = &map_state;
+    wgpuBufferMapAsync(
+        resources.readback_buffer, WGPUMapMode_Read,
+        0u, output_bytes, callback);
+    wgpuDevicePoll(device, WGPU_TRUE, nullptr);
+    wait_for_callback(instance, map_state, "flat Box readback");
+    if (!map_state.success) {
+      throw std::runtime_error(
+          "flat Box readback failed: " + map_state.error);
+    }
+    const void* mapped = wgpuBufferGetConstMappedRange(
+        resources.readback_buffer, 0u, output_bytes);
+    if (mapped == nullptr) {
+      wgpuBufferUnmap(resources.readback_buffer);
+      throw std::runtime_error("flat Box mapped range unavailable");
+    }
+    std::vector<GpuFlatResult> output(rays.size());
+    std::memcpy(output.data(), mapped,
+                static_cast<std::size_t>(output_bytes));
+    wgpuBufferUnmap(resources.readback_buffer);
+
+    std::vector<FlatBoundary> candidates;
+    candidates.reserve(output.size());
+    for (const auto& item : output) {
+      if (item.kind > 2u) {
+        throw std::runtime_error(
+            "flat Box shader returned invalid boundary kind");
+      }
+      candidates.push_back(FlatBoundary{
+          static_cast<FlatBoundaryKind>(item.kind),
+          static_cast<double>(item.distance_mm),
+          item.daughter_id});
+    }
+    return candidates;
+  }
+
   WGPUInstance instance = nullptr;
   WGPUAdapter adapter = nullptr;
   WGPUDevice device = nullptr;
@@ -1158,6 +1573,12 @@ void WebGpuBackend::axpy(const double a, const std::vector<double>& x,
   std::transform(
       y_staging.begin(), y_staging.end(), y.begin(),
       [](float value) { return static_cast<double>(value); });
+}
+
+std::vector<FlatBoundary> WebGpuBackend::flat_box_fused_candidates_batch(
+    const FlatBoxScene& scene,
+    const std::vector<BoxRay>& rays) {
+  return impl_->flat_box_fused_candidates_batch(scene, rays);
 }
 
 std::vector<double> WebGpuBackend::box_distance_to_in_batch(
