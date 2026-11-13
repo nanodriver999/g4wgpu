@@ -832,6 +832,14 @@ class WebGpuBackend::Impl {
   }
 
   void release() noexcept {
+    if (flat_box_fused_pipeline != nullptr) {
+      wgpuComputePipelineRelease(flat_box_fused_pipeline);
+      flat_box_fused_pipeline = nullptr;
+    }
+    if (flat_box_fused_shader != nullptr) {
+      wgpuShaderModuleRelease(flat_box_fused_shader);
+      flat_box_fused_shader = nullptr;
+    }
     if (pipeline != nullptr) {
       wgpuComputePipelineRelease(pipeline);
       pipeline = nullptr;
@@ -1368,27 +1376,37 @@ class WebGpuBackend::Impl {
     const std::uint64_t output_bytes =
         rays.size() * sizeof(GpuFlatResult);
 
-    DispatchResources resources;
-    resources.shader = create_shader_module(
-        device, kFlatBoxFusedShader, "g4wgpu_flat_box_fused_shader");
-    if (resources.shader == nullptr) {
-      throw std::runtime_error("failed to create flat Box shader");
-    }
-    WGPUComputeState compute = WGPU_COMPUTE_STATE_INIT;
-    compute.module = resources.shader;
-    compute.entryPoint = string_view("main");
-    WGPUComputePipelineDescriptor pipeline_descriptor =
-        WGPU_COMPUTE_PIPELINE_DESCRIPTOR_INIT;
-    pipeline_descriptor.label =
-        string_view("g4wgpu_flat_box_fused_pipeline");
-    pipeline_descriptor.compute = compute;
-    resources.pipeline = wgpuDeviceCreateComputePipeline(
-        device, &pipeline_descriptor);
-    if (resources.pipeline == nullptr) {
-      throw std::runtime_error(
-          "failed to create flat Box compute pipeline");
+    // Compile once per backend instance. The compiled module/pipeline
+    // outlive per-dispatch staging buffers and are released before the
+    // owning WebGPU device during Impl::release().
+    if (flat_box_fused_pipeline == nullptr) {
+      WGPUShaderModule new_shader = create_shader_module(
+          device, kFlatBoxFusedShader, "g4wgpu_flat_box_fused_shader");
+      if (new_shader == nullptr) {
+        throw std::runtime_error("failed to create flat Box shader");
+      }
+      WGPUComputeState compute = WGPU_COMPUTE_STATE_INIT;
+      compute.module = new_shader;
+      compute.entryPoint = string_view("main");
+      WGPUComputePipelineDescriptor pipeline_descriptor =
+          WGPU_COMPUTE_PIPELINE_DESCRIPTOR_INIT;
+      pipeline_descriptor.label =
+          string_view("g4wgpu_flat_box_fused_pipeline");
+      pipeline_descriptor.compute = compute;
+      WGPUComputePipeline new_pipeline =
+          wgpuDeviceCreateComputePipeline(
+              device, &pipeline_descriptor);
+      if (new_pipeline == nullptr) {
+        wgpuShaderModuleRelease(new_shader);
+        throw std::runtime_error(
+            "failed to create flat Box compute pipeline");
+      }
+      flat_box_fused_shader = new_shader;
+      flat_box_fused_pipeline = new_pipeline;
+      ++flat_box_fused_pipeline_creations;
     }
 
+    DispatchResources resources;
     resources.x_buffer = create_buffer(
         device, "g4wgpu_flat_box_rays", ray_bytes,
         WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
@@ -1413,7 +1431,7 @@ class WebGpuBackend::Impl {
     }
 
     resources.layout = wgpuComputePipelineGetBindGroupLayout(
-        resources.pipeline, 0);
+        flat_box_fused_pipeline, 0);
     if (resources.layout == nullptr) {
       throw std::runtime_error("flat Box bind group layout unavailable");
     }
@@ -1467,7 +1485,7 @@ class WebGpuBackend::Impl {
     if (pass == nullptr) {
       throw std::runtime_error("flat Box compute pass creation failed");
     }
-    wgpuComputePassEncoderSetPipeline(pass, resources.pipeline);
+    wgpuComputePassEncoderSetPipeline(pass, flat_box_fused_pipeline);
     wgpuComputePassEncoderSetBindGroup(
         pass, 0u, resources.bind_group, 0u, nullptr);
     const std::uint32_t workgroups =
@@ -1537,6 +1555,12 @@ class WebGpuBackend::Impl {
   WGPUQueue queue = nullptr;
   WGPUShaderModule shader = nullptr;
   WGPUComputePipeline pipeline = nullptr;
+
+  // Lifetime: one module/pipeline per WebGpuBackend instance. The
+  // benchmark and GPU integration test verify successful reuse.
+  WGPUShaderModule flat_box_fused_shader = nullptr;
+  WGPUComputePipeline flat_box_fused_pipeline = nullptr;
+  std::size_t flat_box_fused_pipeline_creations = 0u;
 };
 
 WebGpuBackend::WebGpuBackend() : impl_(std::make_unique<Impl>()) {}
@@ -1579,6 +1603,11 @@ std::vector<FlatBoundary> WebGpuBackend::flat_box_fused_candidates_batch(
     const FlatBoxScene& scene,
     const std::vector<BoxRay>& rays) {
   return impl_->flat_box_fused_candidates_batch(scene, rays);
+}
+
+std::size_t WebGpuBackend::flat_box_fused_pipeline_creations()
+    const noexcept {
+  return impl_->flat_box_fused_pipeline_creations;
 }
 
 std::vector<double> WebGpuBackend::box_distance_to_in_batch(

@@ -55,3 +55,16 @@ sizes**, including CPU preflight, staging, transfer, dispatch and readback,
 and to evaluate whether persistent buffers/pipeline reuse are justified.
 Keep GPU physics, RNG and Geant4 track navigation unchanged until broader
 differential and performance evidence exists.
+
+## Reusing the fused pipeline
+
+The opt-in fused path now lazily retains its WGSL shader module and
+compute pipeline on the `WebGpuBackend` implementation, releasing both
+before the device is destroyed. Creation is transactional: a failed
+pipeline creation releases its temporary shader module. Tests verify
+that repeated dispatches (and the validated wrapper) compile the pipeline
+exactly once per backend. No global cache or cross-device pipeline
+sharing is introduced. This does **not** yet make geometry/ray buffers
+GPU-resident; the scene is still uploaded and output is read back on
+**every call**. The f64 CPU preflight, discrepancy substitutions and
+Geant4 navigator ownership are unchanged.

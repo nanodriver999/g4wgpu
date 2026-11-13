@@ -95,7 +95,15 @@ int main() {
   // Verify the actual single-dispatch WGSL candidate, NOT only the safe
   // CPU-substituted wrapper. Stable cases should already match the f64
   // reference without requiring CPU repair.
+  if (backend.flat_box_fused_pipeline_creations() != 0u) {
+    std::cerr << "Fused pipeline should be lazily created\n";
+    return EXIT_FAILURE;
+  }
   const auto raw = backend.flat_box_fused_candidates_batch(scene, rays);
+  if (backend.flat_box_fused_pipeline_creations() != 1u) {
+    std::cerr << "Fused pipeline was not compiled exactly once\n";
+    return EXIT_FAILURE;
+  }
   if (raw.size() != rays.size()) {
     std::cerr << "Raw fused GPU result count mismatch\n";
     return EXIT_FAILURE;
@@ -131,6 +139,10 @@ int main() {
       stats.gpu_fused_dispatches != 1u ||
       stats.cpu_reference_fallbacks != 0u) {
     std::cerr << "Fused GPU dispatch/fallback counters mismatch\n";
+    return EXIT_FAILURE;
+  }
+  if (backend.flat_box_fused_pipeline_creations() != 1u) {
+    std::cerr << "Validated fused call recompiled the pipeline\n";
     return EXIT_FAILURE;
   }
   for (std::size_t i = 0; i < rays.size(); ++i) {
@@ -179,7 +191,8 @@ int main() {
   g4wgpu::FlatBoxGpuBatchStats empty_stats;
   if (!g4wgpu::flat_box_next_boundary_webgpu_fused_batch(
            backend, scene, {}, &empty_stats).empty() ||
-      empty_stats.gpu_fused_dispatches != 0u) {
+      empty_stats.gpu_fused_dispatches != 0u ||
+      backend.flat_box_fused_pipeline_creations() != 1u) {
     std::cerr << "Empty fused batch not handled\n";
     return EXIT_FAILURE;
   }

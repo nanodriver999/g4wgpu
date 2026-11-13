@@ -23,3 +23,23 @@ not hardware speedup; timings vary with adapter and load. The harness is
 opt-in and intentionally **not a CI timing threshold**. It neither changes
 Geant4 tracking nor RNG, physics or CPU fallback. Future work may measure
 persistent buffers and larger scenes, but no performance claim is made here.
+
+## Pipeline reuse experiment (November 13, 2026)
+
+The initial CI software-Vulkan baseline from [workflow 43405871332](https://github.com/nanodriver999/g4wgpu/actions/runs/43405871332) was recorded before retaining the fused compute pipeline. The table reports **median measured wall times** in milliseconds (3 repeats each, warmed up, release build); the adapter is software Vulkan, not a dedicated GPU:
+
+| Rays | CPU f64 | Fused GPU, validated |
+|---:|---:|---:|
+| 1 | 0.001614 | 6.56646 |
+| 32 | 0.010199 | 6.55306 |
+| 256 | 0.071523 | 6.60351 |
+| 1024 | 0.270002 | 7.11770 |
+
+The persistent **shader module + compute pipeline** introduced in the next
+increment is reused across nonempty fused batches on the same backend.
+The per-call ray/geometry buffers, bind group, encoder, transfer and readback
+are still recreated. Re-running the exact benchmark in CI records the new
+warmed-up end-to-end cost without changing the CSV schema or setting
+flaky numerical performance thresholds. Pipeline creation is counted and
+asserted to occur only once per WebGPU backend lifetime. Compare separate
+runs cautiously: shared CI load and software-renderer variance can dominate.
