@@ -18,6 +18,9 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - name: Test fused benchmark CSV validator contract
+        run: python3 -m unittest discover -s tests/integration -p 'test_fused_benchmark_csv_validator.py' -v
+
       - name: Configure CPU build
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
       - name: Build CPU path
