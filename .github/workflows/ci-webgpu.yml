@@ -51,6 +51,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DG4WGPU_ENABLE_WEBGPU=ON \
             -DG4WGPU_RUN_GPU_TESTS=ON \
+            -DG4WGPU_BUILD_BENCHMARKS=ON \
             -DG4WGPU_WGPU_NATIVE_INCLUDE_DIR=/tmp/wgpu-native/ffi \
             -DG4WGPU_WEBGPU_HEADER_DIR=/tmp/wgpu-native/ffi/webgpu-headers \
             -DG4WGPU_WGPU_NATIVE_LIBRARY=/tmp/wgpu-native/target/release/libwgpu_native.so
