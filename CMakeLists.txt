@@ -611,6 +611,17 @@ if(G4WGPU_BUILD_TESTING)
             COMMAND g4wgpu_webgpu_box_exit_test
         )
 
+        add_executable(g4wgpu_webgpu_flat_box_fused_test
+            tests/integration/test_webgpu_flat_box_fused.cc
+        )
+        target_link_libraries(g4wgpu_webgpu_flat_box_fused_test
+            PRIVATE g4wgpu::core
+        )
+        add_test(
+            NAME g4wgpu.webgpu_flat_box_fused
+            COMMAND g4wgpu_webgpu_flat_box_fused_test
+        )
+
         add_executable(g4wgpu_webgpu_flat_box_navigation_test
             tests/integration/test_webgpu_flat_box_navigation.cc
         )
