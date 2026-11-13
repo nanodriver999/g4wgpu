@@ -20,7 +20,11 @@ kernel-only timings. Do not infer GPU kernel speedup from these figures.
 Record the adapter, driver, OS, compiler, build mode, GPU device and wgpu-native
 revision alongside CSV output. Software Vulkan CI can establish correctness,
 not hardware speedup; timings vary with adapter and load. The harness is
-opt-in and intentionally **not a CI timing threshold**. It neither changes
+opt-in and intentionally **not a CI timing threshold**. The fixed rays are
+well-conditioned and expected to have zero CPU substitutions; the CSV contract
+rejects substituted fused results so a passing benchmark cannot hide CPU
+fallback as GPU correctness. This assertion is limited to this benchmark,
+not a removal of the production CPU fallback. It neither changes
 Geant4 tracking nor RNG, physics or CPU fallback. Future work may measure
 persistent buffers and larger scenes, but no performance claim is made here.
 

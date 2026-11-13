@@ -68,6 +68,12 @@ class FusedCsvValidatorTest(unittest.TestCase):
         fused["dispatches"] = "0"
         self.check(data, error=True)
 
+    def test_fused_cpu_substitution_is_rejected(self):
+        data = rows()
+        fused = next(row for row in data if row["method"] == "fused_validated")
+        fused["cpu_substitutions"] = "1"
+        self.check(data, error=True)
+
     def test_out_of_range_substitutions(self):
         data = rows()
         fused = next(row for row in data if row["method"] == "fused_validated")

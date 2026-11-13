@@ -42,6 +42,10 @@ def validate(path: Path) -> None:
             raise ValueError(f"CPU row has GPU activity: {key}")
         if method == "fused_validated" and dispatches != 1:
             raise ValueError(f"Fused row must dispatch exactly once: {key}")
+        # This fixed, well-conditioned workload must not silently report
+        # CPU-substituted results as successful GPU measurements.
+        if method == "fused_validated" and substitutions != 0:
+            raise ValueError(f"Unexpected fused CPU substitution for {key}")
     if seen != expected:
         raise ValueError(f"Missing measurements: {sorted(expected - seen)}")
 
