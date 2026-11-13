@@ -25,7 +25,7 @@ int main() {
     rays.reserve(count);
     for (std::size_t i = 0; i < count; ++i) {
       const double y = (static_cast<int>(i % 21) - 10) * 0.3;
-      rays.push_back({{{0.0, y, 0.0}}, {{1.0, 0.0, 0.0}}});
+      rays.push_back({{0.0, y, 0.0}, {1.0, 0.0, 0.0}});
     }
     // Warm-up is deliberately outside measured intervals.
     (void)g4wgpu::flat_box_next_boundary_webgpu_fused_batch(gpu, scene, rays);
