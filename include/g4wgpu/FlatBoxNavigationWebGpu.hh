@@ -12,6 +12,7 @@ class WebGpuBackend;
 struct FlatBoxGpuBatchStats {
   std::size_t gpu_box_dispatches = 0;
   std::size_t cpu_reference_fallbacks = 0;
+  std::size_t gpu_fused_dispatches = 0;
 };
 
 // Submit world/daughter Box candidate distances to WebGPU in batches;
@@ -29,4 +30,17 @@ std::vector<FlatBoundary> flat_box_next_boundary_webgpu_batch(
     FlatBoxGpuBatchStats* stats = nullptr,
     double absolute_tolerance_mm = 5.0e-4,
     double relative_tolerance = 5.0e-5);
+// Parallel experimental alternative: a single WGSL dispatch computes all
+// candidate distances and selects the next boundary/ID on the device.
+// Independently compare every GPU answer with the f64 CPU reference,
+// substitute the reference on discrepancies, and preserve Geant4 fallback.
+// Storage descriptors are re-uploaded on each call (not resident yet).
+std::vector<FlatBoundary> flat_box_next_boundary_webgpu_fused_batch(
+    WebGpuBackend& gpu,
+    const FlatBoxScene& scene,
+    const std::vector<BoxRay>& rays,
+    FlatBoxGpuBatchStats* stats = nullptr,
+    double absolute_tolerance_mm = 5.0e-4,
+    double relative_tolerance = 5.0e-5);
+
 }  // namespace g4wgpu
