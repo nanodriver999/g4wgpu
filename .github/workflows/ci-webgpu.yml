@@ -83,6 +83,15 @@ jobs:
           python3 tests/integration/validate_fused_benchmark_csv.py fused-box-benchmark.csv
           cat fused-box-benchmark.csv
 
+      - name: Preserve fused Box benchmark CSV
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fused-box-benchmark-csv
+          path: fused-box-benchmark.csv
+          if-no-files-found: warn
+          retention-days: 14
+
 
   geant4-compile-link:
     runs-on: ubuntu-24.04
