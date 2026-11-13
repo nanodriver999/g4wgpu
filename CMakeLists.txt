@@ -6,6 +6,7 @@ option(G4WGPU_BUILD_TESTING "Build g4wgpu tests" ON)
 option(G4WGPU_ENABLE_WEBGPU "Enable the WebGPU backend" OFF)
 option(G4WGPU_ENABLE_GEANT4 "Enable the Geant4 integration layer" OFF)
 option(G4WGPU_RUN_GPU_TESTS "Run tests that require a usable GPU/WebGPU adapter" OFF)
+option(G4WGPU_BUILD_BENCHMARKS "Build opt-in end-to-end timing tools" OFF)
 
 set(G4WGPU_WGPU_NATIVE_INCLUDE_DIR "" CACHE PATH
     "Directory containing wgpu-native wgpu.h")
@@ -666,4 +667,12 @@ if(G4WGPU_BUILD_TESTING)
             COMMAND g4wgpu_webgpu_gamma_process_competition_test
         )
     endif()
+endif()
+
+# Manual benchmark only: never use wall-time values as CI pass/fail criteria.
+if(G4WGPU_ENABLE_WEBGPU AND G4WGPU_BUILD_BENCHMARKS)
+    add_executable(g4wgpu_flat_box_fused_benchmark
+        tests/integration/benchmark_webgpu_flat_box_fused.cc
+    )
+    target_link_libraries(g4wgpu_flat_box_fused_benchmark PRIVATE g4wgpu::core)
 endif()
