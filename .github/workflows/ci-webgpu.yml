@@ -69,6 +69,19 @@ jobs:
         run: ctest --test-dir build-wgpu -R '^g4wgpu\.webgpu_' --output-on-failure --no-tests=error
 
 
+      - name: Validate fused Box benchmark on software Vulkan (no timing gate)
+        env:
+          LD_LIBRARY_PATH: /tmp/wgpu-native/target/release
+          WGPU_BACKEND: vulkan
+        run: |
+          # The executable checks every GPU result against the CPU f64 oracle.
+          # Wall-time CSV is diagnostic only; no speedup threshold is enforced.
+          timeout 180s ./build-wgpu/g4wgpu_flat_box_fused_benchmark > fused-box-benchmark.csv
+          head -n 1 fused-box-benchmark.csv | grep -Fx 'batch,method,repeat,wall_ms,cpu_substitutions,dispatches'
+          test "$(wc -l < fused-box-benchmark.csv)" -eq 25
+          cat fused-box-benchmark.csv
+
+
   geant4-compile-link:
     runs-on: ubuntu-24.04
     steps:
