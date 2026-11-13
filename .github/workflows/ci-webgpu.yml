@@ -77,8 +77,7 @@ jobs:
           # The executable checks every GPU result against the CPU f64 oracle.
           # Wall-time CSV is diagnostic only; no speedup threshold is enforced.
           timeout 180s ./build-wgpu/g4wgpu_flat_box_fused_benchmark > fused-box-benchmark.csv
-          head -n 1 fused-box-benchmark.csv | grep -Fx 'batch,method,repeat,wall_ms,cpu_substitutions,dispatches'
-          test "$(wc -l < fused-box-benchmark.csv)" -eq 25
+          python3 tests/integration/validate_fused_benchmark_csv.py fused-box-benchmark.csv
           cat fused-box-benchmark.csv
 
 
