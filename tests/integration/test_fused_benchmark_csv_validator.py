@@ -80,6 +80,41 @@ class FusedCsvValidatorTest(unittest.TestCase):
         fused["cpu_substitutions"] = str(int(fused["batch"]) + 1)
         self.check(data, error=True)
 
+    def test_malformed_csv_rows(self):
+        # A missing field and an extra field must not be silently accepted.
+        for line in ("1,cpu,0,0.01,0", "1,cpu,0,0.01,0,0,unexpected"):
+            with self.subTest(line=line):
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "benchmark.csv"
+                    with path.open("w", encoding="utf-8", newline="") as stream:
+                        writer = csv.DictWriter(stream, fieldnames=validator.HEADER)
+                        writer.writeheader()
+                        writer.writerows(rows()[1:])
+                        stream.write(line + "\n")
+                    with self.assertRaises(ValueError):
+                        validator.validate(path)
+
+    def test_invalid_numeric_fields(self):
+        for field, value in (
+            ("batch", "not-an-integer"),
+            ("repeat", "not-an-integer"),
+            ("wall_ms", "not-a-number"),
+            ("cpu_substitutions", "not-an-integer"),
+            ("dispatches", "not-an-integer"),
+            ("dispatches", "-1"),
+        ):
+            with self.subTest(field=field, value=value):
+                data = rows()
+                data[0][field] = value
+                self.check(data, error=True)
+
+    def test_unknown_method_and_batch(self):
+        for field, value in (("method", "unknown"), ("batch", "999")):
+            with self.subTest(field=field, value=value):
+                data = rows()
+                data[0][field] = value
+                self.check(data, error=True)
+
     def test_unexpected_header(self):
         self.check(rows(), header=validator.HEADER[::-1], error=True)
 
