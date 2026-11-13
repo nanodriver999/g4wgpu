@@ -35,6 +35,10 @@ int main() {
     }
     // Warm-up is deliberately outside measured intervals.
     (void)g4wgpu::flat_box_next_boundary_webgpu_fused_batch(gpu, scene, rays);
+    if (gpu.flat_box_fused_pipeline_creations() != 1u) {
+      std::cerr << "Expected exactly one cached fused WGSL pipeline\n";
+      return EXIT_FAILURE;
+    }
     for (int repeat = 0; repeat < 3; ++repeat) {
       const auto cpu_start = std::chrono::steady_clock::now();
       std::vector<g4wgpu::FlatBoundary> cpu;
@@ -49,6 +53,10 @@ int main() {
       const auto checked = g4wgpu::flat_box_next_boundary_webgpu_fused_batch(
           gpu, scene, rays, &stats);
       const auto gpu_end = std::chrono::steady_clock::now();
+      if (gpu.flat_box_fused_pipeline_creations() != 1u) {
+        std::cerr << "Repeated fused batch unexpectedly recompiled WGSL\n";
+        return EXIT_FAILURE;
+      }
       if (checked.size() != cpu.size()) return EXIT_FAILURE;
       for (std::size_t i = 0; i < count; ++i) {
         if (checked[i].kind != cpu[i].kind ||

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstddef>
 #include <memory>
 #include <string_view>
 
@@ -35,6 +36,11 @@ class WebGpuBackend final : public ComputeBackend, public PhysicsBackend {
   // Bounded prototype: <=8192 rays and <=64 daughters per call.
   std::vector<FlatBoundary> flat_box_fused_candidates_batch(
       const FlatBoxScene& scene, const std::vector<BoxRay>& rays);
+
+  // Experimental diagnostic: count successful WGSL pipeline creations.
+  // After the first nonempty fused batch, repeated calls must reuse it.
+  [[nodiscard]] std::size_t
+  flat_box_fused_pipeline_creations() const noexcept;
 
   // Experimental standalone Box ray-entry kernel: the result is advisory
   // and is never promoted into Geant4 navigation without further validation.
