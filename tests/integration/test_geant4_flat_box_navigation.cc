@@ -119,6 +119,12 @@ int main() {
       {{34.999,0,0}, {1,0,0}, Kind::daughter_exit, 22u},
       {{-42.999,0,0}, {-1,0,0}, Kind::daughter_exit, 11u},
       {{0,0,99.999}, {0,0,1}, Kind::world_exit, 0u},
+      // Near-face clearances along independent axes also use the Geant4
+      // oracle; avoid exact surface origins and tolerance ambiguity.
+      {{25,7.999,0}, {0,1,0}, Kind::daughter_exit, 22u},
+      {{-35,0,11.999}, {0,0,1}, Kind::daughter_exit, 11u},
+      {{99.999,0,0}, {1,0,0}, Kind::world_exit, 0u},
+      {{0,-99.999,0}, {0,-1,0}, Kind::world_exit, 0u},
   };
 
   // Geant4 normalizes track directions. Verify the portable reference
