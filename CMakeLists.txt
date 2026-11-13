@@ -89,6 +89,7 @@ if(G4WGPU_ENABLE_WEBGPU)
     target_sources(g4wgpu_core
         PRIVATE
             src/webgpu/WebGpuBackend.cc
+            src/webgpu/FlatBoxNavigationWebGpu.cc
             src/webgpu/WebGpuKleinNishina.cc
             src/webgpu/WebGpuGammaProcessCompetition.cc
     )
@@ -608,6 +609,17 @@ if(G4WGPU_BUILD_TESTING)
         add_test(
             NAME g4wgpu.webgpu_box_exit
             COMMAND g4wgpu_webgpu_box_exit_test
+        )
+
+        add_executable(g4wgpu_webgpu_flat_box_navigation_test
+            tests/integration/test_webgpu_flat_box_navigation.cc
+        )
+        target_link_libraries(g4wgpu_webgpu_flat_box_navigation_test
+            PRIVATE g4wgpu::core
+        )
+        add_test(
+            NAME g4wgpu.webgpu_flat_box_navigation
+            COMMAND g4wgpu_webgpu_flat_box_navigation_test
         )
 
         add_executable(g4wgpu_webgpu_box_geometry_test
