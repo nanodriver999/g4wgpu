@@ -4,6 +4,7 @@
 #include <string_view>
 
 #include "g4wgpu/BoxGeometry.hh"
+#include "g4wgpu/FlatBoxNavigation.hh"
 #include "g4wgpu/OrbGeometry.hh"
 #include "g4wgpu/TubsGeometry.hh"
 #include "g4wgpu/ComputeBackend.hh"
@@ -27,6 +28,13 @@ class WebGpuBackend final : public ComputeBackend, public PhysicsBackend {
             std::vector<double>& y) override;
 
   void advance_positions(TrackBatch& tracks, double dt) override;
+
+  // Raw, standalone single-dispatch Box-world/daughter candidate selection.
+  // f64 caller/scene validation is still performed; the result is advisory
+  // and MUST be compared with the CPU reference before any transport use.
+  // Bounded prototype: <=8192 rays and <=64 daughters per call.
+  std::vector<FlatBoundary> flat_box_fused_candidates_batch(
+      const FlatBoxScene& scene, const std::vector<BoxRay>& rays);
 
   // Experimental standalone Box ray-entry kernel: the result is advisory
   // and is never promoted into Geant4 navigation without further validation.
