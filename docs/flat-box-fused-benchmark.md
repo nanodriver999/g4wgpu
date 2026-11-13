@@ -6,7 +6,11 @@ integration tests. Run `g4wgpu_flat_box_fused_benchmark` from the build tree.
 
 The program prints CSV columns `batch,method,repeat,wall_ms,cpu_substitutions,dispatches`
 for batches of 1, 32, 256 and 1024 rays, with one warm-up and three
-measured repeats. It compares CPU f64 reference navigation with the **safe
+measured repeats. The batch cycles through +X and -X daughter entries,
+a world-only exit from the center, and a short world-only exit near the
++X boundary (the single-ray case contains only the +X daughter entry).
+This mixed workload is intentionally deterministic and is not a representative
+detector track distribution. It compares CPU f64 reference navigation with the **safe
 validated fused GPU wrapper**, verifying kind, daughter ID and distance.
 The measured GPU wall time includes host validation, pipeline/buffer setup,
 upload, dispatch, readback and substitutions. CPU timing includes independent
