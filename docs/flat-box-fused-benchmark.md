@@ -17,7 +17,12 @@ upload, dispatch, readback and substitutions. CPU timing includes independent
 per-ray reference calls. These are different end-to-end paths, not matched
 kernel-only timings. Do not infer GPU kernel speedup from these figures.
 
-Record the adapter, driver, OS, compiler, build mode, GPU device and wgpu-native
+The WebGPU CI artifact retains both `fused-box-benchmark.csv` and
+`fused-box-environment.txt` for 14 days. The metadata captures the runner OS,
+architecture, kernel, compiler, pinned wgpu-native revision, build mode and
+Vulkan device/driver summary. The Vulkan probe is diagnostic and does not gate
+correctness if device enumeration fails. For local hardware benchmarks, also
+record the adapter, driver, OS, compiler, build mode, GPU device and wgpu-native
 revision alongside CSV output. Software Vulkan CI can establish correctness,
 not hardware speedup; timings vary with adapter and load. The harness is
 opt-in and intentionally **not a CI timing threshold**. The fixed rays are
