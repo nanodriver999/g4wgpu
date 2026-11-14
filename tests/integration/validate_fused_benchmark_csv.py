@@ -2,6 +2,7 @@
 """Validate fused Box benchmark CSV semantics without gating wall-time performance."""
 import csv
 import math
+import statistics
 import sys
 from pathlib import Path
 
@@ -50,6 +51,30 @@ def validate(path: Path) -> None:
         raise ValueError(f"Missing measurements: {sorted(expected - seen)}")
 
 
+
+def summarize(path: Path) -> list[str]:
+    """Report per-batch median wall times; never use these as a CI speed gate."""
+    validate(path)
+    with path.open(newline="", encoding="utf-8") as stream:
+        rows = list(csv.DictReader(stream))
+    lines = []
+    for batch in BATCHES:
+        times = {
+            method: statistics.median(
+                float(row["wall_ms"]) for row in rows
+                if int(row["batch"]) == batch and row["method"] == method
+            )
+            for method in METHODS
+        }
+        cpu, gpu = times["cpu"], times["fused_validated"]
+        ratio = f"{cpu / gpu:.3f}x" if gpu > 0 else "n/a (zero GPU wall time)"
+        lines.append(
+            f"batch={batch} median_cpu_ms={cpu:.6f} "
+            f"median_fused_ms={gpu:.6f} cpu_over_fused={ratio}"
+        )
+    return lines
+
+
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         sys.exit("Usage: validate_fused_benchmark_csv.py PATH")
@@ -58,3 +83,6 @@ if __name__ == "__main__":
     except (OSError, ValueError) as exc:
         sys.exit(f"Invalid fused Box benchmark CSV: {exc}")
     print("Fused Box benchmark CSV contract validated (timings not gated)")
+    for line in summarize(Path(sys.argv[1])):
+        print(line)
+    print("Diagnostic end-to-end wall-time ratios only; no GPU kernel speedup claim")
