@@ -96,7 +96,7 @@ class FusedCsvValidatorTest(unittest.TestCase):
 
     def test_blank_csv_records_are_rejected(self):
         # csv.DictReader skips blank lines unless the contract checks explicitly.
-        for blank in ("\\n", "   \\n"):
+        for blank in ("\n", "   \n"):
             with self.subTest(blank=repr(blank)):
                 with tempfile.TemporaryDirectory() as directory:
                     path = Path(directory) / "benchmark.csv"
