@@ -12,6 +12,15 @@ METHODS = ("cpu", "fused_validated")
 HEADER = ["batch", "method", "repeat", "wall_ms", "cpu_substitutions", "dispatches"]
 
 
+def parse_count(value: str, field: str) -> int:
+    """Accept only canonical unsigned decimal counters from the benchmark."""
+    if not value.isascii() or not value.isdecimal() or (
+        len(value) > 1 and value.startswith("0")
+    ):
+        raise ValueError(f"Invalid {field}: {value!r}")
+    return int(value)
+
+
 def validate(path: Path) -> None:
     with path.open(newline="", encoding="utf-8") as stream:
         # DictReader silently skips blank records; reject truncated or padded output.
@@ -29,9 +38,9 @@ def validate(path: Path) -> None:
     for row in rows:
         if None in row or any(value is None for value in row.values()):
             raise ValueError(f"Malformed CSV row: {row}")
-        batch = int(row["batch"])
+        batch = parse_count(row["batch"], "batch")
         method = row["method"]
-        repeat = int(row["repeat"])
+        repeat = parse_count(row["repeat"], "repeat")
         key = (batch, method, repeat)
         if key not in expected or key in seen:
             raise ValueError(f"Unexpected or duplicate measurement: {key}")
@@ -39,8 +48,8 @@ def validate(path: Path) -> None:
         wall_ms = float(row["wall_ms"])
         if not math.isfinite(wall_ms) or wall_ms < 0:
             raise ValueError(f"Invalid wall time for {key}: {wall_ms}")
-        substitutions = int(row["cpu_substitutions"])
-        dispatches = int(row["dispatches"])
+        substitutions = parse_count(row["cpu_substitutions"], "cpu_substitutions")
+        dispatches = parse_count(row["dispatches"], "dispatches")
         if substitutions < 0 or substitutions > batch:
             raise ValueError(f"Invalid CPU substitution count for {key}")
         if method == "cpu" and (substitutions != 0 or dispatches != 0):
