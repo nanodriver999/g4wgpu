@@ -8,7 +8,16 @@ WebGPU compute로 단계적으로 가속하는 연구 프로젝트입니다.
 
 ## 현재 상태
 
-현재 단계는 Geant4 11.5.0.beta 소스 구조 분석과 구현 계획 수립입니다.
+초기 분석 및 구현 계획 이후 CPU reference, WebGPU backend, Geant4 tracking-manager 연동과 검증용 geometry/physics 경로를 단계적으로 구현했습니다. 아래 기능은 연구용 프로토타입이며 전체 Geant4 tracking을 GPU로 대체하지 않습니다.
+
+현재 검증 범위:
+
+- CPU reference 및 WebGPU Klein–Nishina batch sampler, Geant4 gamma shadow integration (`docs/geant4-webgpu-shadow.md`)
+- Geant4 `G4VTrackingManager` 확장과 선택적 Compton 경로의 회귀 검증; 지원되지 않는 track/process는 CPU 경로 유지
+- Box 기반 flattened geometry의 opt-in fused WebGPU next-boundary 실험 (`docs/flat-box-fused-webgpu.md`); Geant4 CPU navigator가 authoritative 경로로 유지됨
+- 배치별 end-to-end wall-time CSV 벤치마크 및 환경 메타데이터 (`docs/flat-box-fused-benchmark.md`)
+
+GitHub Actions는 CPU, WebGPU(software Vulkan), Geant4, 결합 통합 경로를 검사합니다. 소프트웨어 Vulkan 통과는 실제 GPU 하드웨어의 속도 향상이나 모든 geometry/physics 상황에서의 정확도를 입증하지 않습니다. `docs/implementation-plan.md`는 초기 단계별 연구 계획이며, 실제 구현 범위와 제약은 각 기능 문서를 참조하세요.
 
 기준 Geant4:
 `nanodriver999/geant4@f3d5293d384757b8a228a099898b2b87cfa4023c`
