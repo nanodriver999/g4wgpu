@@ -122,6 +122,14 @@ class FusedCsvValidatorTest(unittest.TestCase):
                 data[0][field] = value
                 self.check(data, error=True)
 
+    def test_noncanonical_counter_fields(self):
+        for field in ("batch", "repeat", "cpu_substitutions", "dispatches"):
+            for value in ("+1", "01", " 1", "1 ", "1.0", "١"):
+                with self.subTest(field=field, value=value):
+                    data = rows()
+                    data[0][field] = value
+                    self.check(data, error=True)
+
     def test_unknown_method_and_batch(self):
         for field, value in (("method", "unknown"), ("batch", "999")):
             with self.subTest(field=field, value=value):
