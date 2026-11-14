@@ -124,5 +124,37 @@ class FusedCsvValidatorTest(unittest.TestCase):
         self.check(data, error=True)
 
 
+    def test_median_diagnostics_are_per_batch_and_not_gated(self):
+        data = rows()
+        for row in data:
+            row["wall_ms"] = "2.0" if row["method"] == "cpu" else "4.0"
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "benchmark.csv"
+            with path.open("w", newline="", encoding="utf-8") as stream:
+                writer = csv.DictWriter(stream, fieldnames=validator.HEADER)
+                writer.writeheader()
+                writer.writerows(data)
+            summary = validator.summarize(path)
+        self.assertEqual(len(summary), len(validator.BATCHES))
+        for batch, line in zip(validator.BATCHES, summary):
+            self.assertIn(f"batch={batch} ", line)
+            self.assertIn("median_cpu_ms=2.000000", line)
+            self.assertIn("median_fused_ms=4.000000", line)
+            self.assertIn("cpu_over_fused=0.500x", line)
+
+    def test_zero_gpu_time_is_reported_without_division_error(self):
+        data = rows()
+        for row in data:
+            if row["method"] == "fused_validated":
+                row["wall_ms"] = "0"
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "benchmark.csv"
+            with path.open("w", newline="", encoding="utf-8") as stream:
+                writer = csv.DictWriter(stream, fieldnames=validator.HEADER)
+                writer.writeheader()
+                writer.writerows(data)
+            summary = validator.summarize(path)
+        self.assertTrue(all("n/a (zero GPU wall time)" in line for line in summary))
+
 if __name__ == "__main__":
     unittest.main()
