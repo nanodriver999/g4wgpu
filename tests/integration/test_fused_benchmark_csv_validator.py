@@ -94,6 +94,20 @@ class FusedCsvValidatorTest(unittest.TestCase):
                     with self.assertRaises(ValueError):
                         validator.validate(path)
 
+    def test_blank_csv_records_are_rejected(self):
+        # csv.DictReader skips blank lines unless the contract checks explicitly.
+        for blank in ("\n", "   \n"):
+            with self.subTest(blank=repr(blank)):
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "benchmark.csv"
+                    with path.open("w", newline="", encoding="utf-8") as stream:
+                        writer = csv.DictWriter(stream, fieldnames=validator.HEADER)
+                        writer.writeheader()
+                        writer.writerows(rows())
+                        stream.write(blank)
+                    with self.assertRaisesRegex(ValueError, "Blank CSV record"):
+                        validator.validate(path)
+
     def test_invalid_numeric_fields(self):
         for field, value in (
             ("batch", "not-an-integer"),

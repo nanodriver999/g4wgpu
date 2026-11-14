@@ -14,7 +14,11 @@ HEADER = ["batch", "method", "repeat", "wall_ms", "cpu_substitutions", "dispatch
 
 def validate(path: Path) -> None:
     with path.open(newline="", encoding="utf-8") as stream:
-        reader = csv.DictReader(stream)
+        # DictReader silently skips blank records; reject truncated or padded output.
+        lines = stream.readlines()
+        if any(not line.strip() for line in lines):
+            raise ValueError("Blank CSV record")
+        reader = csv.DictReader(lines)
         if reader.fieldnames != HEADER:
             raise ValueError(f"Unexpected CSV header: {reader.fieldnames}")
         rows = list(reader)
