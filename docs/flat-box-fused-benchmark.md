@@ -24,7 +24,10 @@ Vulkan device/driver summary. The Vulkan probe is diagnostic and does not gate
 correctness if device enumeration fails. For local hardware benchmarks, also
 record the adapter, driver, OS, compiler, build mode, GPU device and wgpu-native
 revision alongside CSV output. Software Vulkan CI can establish correctness,
-not hardware speedup; timings vary with adapter and load. The harness is
+not hardware speedup; timings vary with adapter and load. The CSV validator
+reports per-batch median wall times, CPU/fused median ratios and observed
+minimum-to-maximum timing ranges for each method. Wide ranges flag noisy
+measurements for inspection; neither ranges nor ratios are CI performance gates. The harness is
 opt-in and intentionally **not a CI timing threshold**. The fixed rays are
 well-conditioned and expected to have zero CPU substitutions; the CSV contract
 rejects substituted fused results so a passing benchmark cannot hide CPU

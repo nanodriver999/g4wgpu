@@ -141,6 +141,28 @@ class FusedCsvValidatorTest(unittest.TestCase):
             self.assertIn("median_cpu_ms=2.000000", line)
             self.assertIn("median_fused_ms=4.000000", line)
             self.assertIn("cpu_over_fused=0.500x", line)
+            self.assertIn("cpu_range_ms=2.000000..2.000000", line)
+            self.assertIn("fused_range_ms=4.000000..4.000000", line)
+
+    def test_timing_range_reports_outlier_without_changing_median(self):
+        data = rows()
+        for row in data:
+            row["wall_ms"] = "2.0" if row["method"] == "cpu" else "1.0"
+        outlier = next(row for row in data if row["batch"] == "32"
+                       and row["method"] == "fused_validated"
+                       and row["repeat"] == "2")
+        outlier["wall_ms"] = "100.0"
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "benchmark.csv"
+            with path.open("w", newline="", encoding="utf-8") as stream:
+                writer = csv.DictWriter(stream, fieldnames=validator.HEADER)
+                writer.writeheader()
+                writer.writerows(data)
+            summary = validator.summarize(path)
+        line = next(line for line in summary if line.startswith("batch=32 "))
+        self.assertIn("median_fused_ms=1.000000", line)
+        self.assertIn("cpu_over_fused=2.000x", line)
+        self.assertIn("fused_range_ms=1.000000..100.000000", line)
 
     def test_zero_gpu_time_is_reported_without_division_error(self):
         data = rows()

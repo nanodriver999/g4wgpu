@@ -66,11 +66,22 @@ def summarize(path: Path) -> list[str]:
             )
             for method in METHODS
         }
+        ranges = {
+            method: (
+                min(float(row["wall_ms"]) for row in rows
+                    if int(row["batch"]) == batch and row["method"] == method),
+                max(float(row["wall_ms"]) for row in rows
+                    if int(row["batch"]) == batch and row["method"] == method),
+            )
+            for method in METHODS
+        }
         cpu, gpu = times["cpu"], times["fused_validated"]
         ratio = f"{cpu / gpu:.3f}x" if gpu > 0 else "n/a (zero GPU wall time)"
         lines.append(
             f"batch={batch} median_cpu_ms={cpu:.6f} "
-            f"median_fused_ms={gpu:.6f} cpu_over_fused={ratio}"
+            f"median_fused_ms={gpu:.6f} cpu_over_fused={ratio} "
+            f"cpu_range_ms={ranges['cpu'][0]:.6f}..{ranges['cpu'][1]:.6f} "
+            f"fused_range_ms={ranges['fused_validated'][0]:.6f}..{ranges['fused_validated'][1]:.6f}"
         )
     return lines
 
