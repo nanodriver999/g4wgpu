@@ -46,7 +46,7 @@ def validate(path: Path) -> None:
             raise ValueError(f"Unexpected or duplicate measurement: {key}")
         seen.add(key)
         wall_ms = float(row["wall_ms"])
-        if not math.isfinite(wall_ms) or wall_ms < 0:
+        if not math.isfinite(wall_ms) or math.copysign(1.0, wall_ms) < 0:
             raise ValueError(f"Invalid wall time for {key}: {wall_ms}")
         substitutions = parse_count(row["cpu_substitutions"], "cpu_substitutions")
         dispatches = parse_count(row["dispatches"], "dispatches")

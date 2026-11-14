@@ -49,7 +49,7 @@ class FusedCsvValidatorTest(unittest.TestCase):
         self.check(data, error=True)
 
     def test_nonfinite_and_negative_times(self):
-        for value in ("nan", "inf", "-0.01"):
+        for value in ("nan", "inf", "-0.01", "-0.0", "-0", "-0e0"):
             with self.subTest(value=value):
                 data = rows()
                 data[0]["wall_ms"] = value
