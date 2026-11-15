@@ -2,6 +2,7 @@
 """Validate fused Box benchmark CSV semantics without gating wall-time performance."""
 import csv
 import math
+import re
 import statistics
 import sys
 from pathlib import Path
@@ -10,6 +11,7 @@ BATCHES = (1, 32, 256, 1024)
 REPEATS = range(3)
 METHODS = ("cpu", "fused_validated")
 HEADER = ["batch", "method", "repeat", "wall_ms", "cpu_substitutions", "dispatches"]
+WALL_TIME_PATTERN = re.compile(r"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?", re.ASCII)
 
 
 def parse_count(value: str, field: str) -> int:
@@ -45,7 +47,10 @@ def validate(path: Path) -> None:
         if key not in expected or key in seen:
             raise ValueError(f"Unexpected or duplicate measurement: {key}")
         seen.add(key)
-        wall_ms = float(row["wall_ms"])
+        wall_text = row["wall_ms"]
+        if not WALL_TIME_PATTERN.fullmatch(wall_text):
+            raise ValueError(f"Noncanonical wall time for {key}: {wall_text!r}")
+        wall_ms = float(wall_text)
         if not math.isfinite(wall_ms) or math.copysign(1.0, wall_ms) < 0:
             raise ValueError(f"Invalid wall time for {key}: {wall_ms}")
         substitutions = parse_count(row["cpu_substitutions"], "cpu_substitutions")

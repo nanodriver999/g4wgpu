@@ -55,6 +55,23 @@ class FusedCsvValidatorTest(unittest.TestCase):
                 data[0]["wall_ms"] = value
                 self.check(data, error=True)
 
+    def test_noncanonical_wall_time_fields(self):
+        # float() accepts whitespace, Unicode digits and underscores that the
+        # benchmark's ASCII decimal CSV writer never emits.
+        for value in (" 1", "1 ", "+1", "01", "1_0", "١", ".5",
+                      "1.", "0x1", "1\n2", "-0.0"):
+            with self.subTest(value=value):
+                data = rows()
+                data[0]["wall_ms"] = value
+                self.check(data, error=True)
+
+    def test_canonical_scientific_wall_times(self):
+        for value in ("0", "0.0", "1", "1.25", "1e-05", "1E+03"):
+            with self.subTest(value=value):
+                data = rows()
+                data[0]["wall_ms"] = value
+                self.check(data)
+
     def test_invalid_cpu_counts(self):
         for field, value in (("dispatches", "1"), ("cpu_substitutions", "1")):
             with self.subTest(field=field):
