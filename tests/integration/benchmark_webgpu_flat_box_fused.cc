@@ -4,13 +4,31 @@
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
+#include <string>
 #include <vector>
 
 // Opt-in end-to-end wall-time experiment, NOT a performance regression gate.
 // Includes GPU setup, transfers, dispatch, readback and f64 validation.
-int main() {
+int main(int argc, char** argv) {
+  std::ofstream stage_report;
+  if (argc == 3 && std::string(argv[1]) == "--stages-output") {
+    stage_report.open(argv[2]);
+    if (!stage_report) {
+      std::cerr << "Could not create fused Box stage CSV\n";
+      return EXIT_FAILURE;
+    }
+    stage_report << "batch,repeat,cpu_reference_ms,eligibility_ms,"
+                    "backend_preflight_ms,staging_ms,pipeline_ms,"
+                    "resources_ms,upload_ms,submit_ms,readback_ms,"
+                    "decode_ms,reconcile_ms,gpu_call_ms,total_ms,"
+                    "cpu_substitutions,dispatches\n";
+  } else if (argc != 1) {
+    std::cerr << "Usage: fused_benchmark [--stages-output PATH]\n";
+    return EXIT_FAILURE;
+  }
   g4wgpu::FlatBoxScene scene;
   scene.world = {{100.0, 100.0, 100.0}};
   scene.daughters = {
@@ -49,9 +67,11 @@ int main() {
       }
       const auto cpu_end = std::chrono::steady_clock::now();
       g4wgpu::FlatBoxGpuBatchStats stats;
+      g4wgpu::FlatBoxStageTimings durations;
       const auto gpu_start = std::chrono::steady_clock::now();
       const auto checked = g4wgpu::flat_box_next_boundary_webgpu_fused_batch(
-          gpu, scene, rays, &stats);
+          gpu, scene, rays, &stats, 5.0e-4, 5.0e-5,
+          stage_report ? &durations : nullptr);
       const auto gpu_end = std::chrono::steady_clock::now();
       if (gpu.flat_box_fused_pipeline_creations() != 1u) {
         std::cerr << "Repeated fused batch unexpectedly recompiled WGSL\n";
@@ -78,6 +98,24 @@ int main() {
                 << ms(gpu_start, gpu_end) << ","
                 << stats.cpu_reference_fallbacks << ","
                 << stats.gpu_fused_dispatches << '\n';
+      if (stage_report) {
+        stage_report << count << ',' << repeat << ','
+                     << durations.cpu_reference_ms << ','
+                     << durations.eligibility_ms << ','
+                     << durations.backend_preflight_ms << ','
+                     << durations.staging_ms << ','
+                     << durations.pipeline_ms << ','
+                     << durations.resources_ms << ','
+                     << durations.upload_ms << ','
+                     << durations.submit_ms << ','
+                     << durations.readback_ms << ','
+                     << durations.decode_ms << ','
+                     << durations.reconcile_ms << ','
+                     << durations.gpu_call_ms << ','
+                     << durations.total_ms << ','
+                     << stats.cpu_reference_fallbacks << ','
+                     << stats.gpu_fused_dispatches << '\n';
+      }
     }
   }
   if (!std::isfinite(checksum)) return EXIT_FAILURE;

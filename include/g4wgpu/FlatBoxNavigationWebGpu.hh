@@ -3,6 +3,7 @@
 #include <cstddef>
 #include <vector>
 #include "g4wgpu/FlatBoxNavigation.hh"
+#include "g4wgpu/FlatBoxStageTimings.hh"
 
 namespace g4wgpu {
 class WebGpuBackend;
@@ -41,6 +42,7 @@ std::vector<FlatBoundary> flat_box_next_boundary_webgpu_fused_batch(
     const std::vector<BoxRay>& rays,
     FlatBoxGpuBatchStats* stats = nullptr,
     double absolute_tolerance_mm = 5.0e-4,
-    double relative_tolerance = 5.0e-5);
+    double relative_tolerance = 5.0e-5,
+    FlatBoxStageTimings* timings = nullptr);
 
 }  // namespace g4wgpu
