@@ -514,6 +514,17 @@ if(G4WGPU_BUILD_TESTING)
     )
 
     if(G4WGPU_ENABLE_WEBGPU AND G4WGPU_RUN_GPU_TESTS)
+        add_executable(g4wgpu_webgpu_adapter_identity_test
+            tests/integration/test_webgpu_adapter_identity.cc
+        )
+        target_link_libraries(g4wgpu_webgpu_adapter_identity_test
+            PRIVATE g4wgpu::core
+        )
+        add_test(
+            NAME g4wgpu.webgpu_adapter_identity
+            COMMAND g4wgpu_webgpu_adapter_identity_test
+        )
+
         add_executable(g4wgpu_webgpu_backend_test
             tests/integration/test_webgpu_backend.cc
         )

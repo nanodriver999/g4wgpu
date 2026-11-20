@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <string>
 #include <string_view>
 
 #include "g4wgpu/BoxGeometry.hh"
@@ -12,6 +13,15 @@
 #include "g4wgpu/PhysicsBackend.hh"
 
 namespace g4wgpu {
+
+// Identity of the *selected* WebGPU adapter, not a Vulkan inventory probe.
+// Snapshot is captured at backend initialization.
+struct WebGpuAdapterInfo {
+  std::string device;
+  std::string description;
+  std::string backend;
+  std::string adapter_type;
+};
 
 class WebGpuBackend final : public ComputeBackend, public PhysicsBackend {
  public:
@@ -24,6 +34,8 @@ class WebGpuBackend final : public ComputeBackend, public PhysicsBackend {
   WebGpuBackend& operator=(WebGpuBackend&&) noexcept;
 
   [[nodiscard]] std::string_view name() const noexcept override;
+
+  [[nodiscard]] const WebGpuAdapterInfo& adapter_info() const noexcept;
 
   void axpy(double a, const std::vector<double>& x,
             std::vector<double>& y) override;
