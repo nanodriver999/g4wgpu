@@ -38,6 +38,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y mesa-vulkan-drivers vulkan-tools
 
+      - name: Restrict Vulkan loader to Mesa lavapipe
+        shell: bash
+        run: |
+          set -euo pipefail
+          icd="$(find /usr/share/vulkan/icd.d -maxdepth 1 -name 'lvp_icd*.json' -print -quit)"
+          test -n "$icd" && test -f "$icd"
+          echo "VK_ICD_FILENAMES=$icd" >> "$GITHUB_ENV"
+          echo "VK_DRIVER_FILES=$icd" >> "$GITHUB_ENV"
+          echo "WGPU_BACKEND=vulkan" >> "$GITHUB_ENV"
+          echo "G4WGPU_EXPECT_SOFTWARE_VULKAN=1" >> "$GITHUB_ENV"
+          VK_ICD_FILENAMES="$icd" VK_DRIVER_FILES="$icd" vulkaninfo --summary > vulkaninfo-summary.txt
+          cat vulkaninfo-summary.txt
+          grep -Eiq '(llvmpipe|lavapipe)' vulkaninfo-summary.txt
+
       - name: Build pinned wgpu-native
         shell: bash
         run: |
@@ -64,6 +78,13 @@ jobs:
 
       - name: Run CPU regression in WebGPU build
         run: ctest --test-dir build-wgpu -R g4wgpu.cpu_backend --output-on-failure
+
+      - name: Record the adapter selected by WebGPU
+        env:
+          LD_LIBRARY_PATH: /tmp/wgpu-native/target/release
+        run: |
+          timeout 60s ./build-wgpu/g4wgpu_webgpu_adapter_identity_test > webgpu-adapter-info.txt
+          cat webgpu-adapter-info.txt
 
       - name: Run WebGPU smoke test on software Vulkan
         env:
@@ -94,6 +115,8 @@ jobs:
             echo "wgpu_native_revision=250eeb67f8d091bf7dbc4fc253293d10900cff64"
             echo "build_type=Release"
             echo "gpu_backend=vulkan"
+            echo "software_vulkan_icd=${VK_ICD_FILENAMES:-unknown}"
+            echo "selected_adapter_report=webgpu-adapter-info.txt"
             echo "compiler=$(c++ --version | head -n 1)"
             echo "kernel=$(uname -sr)"
             echo "vulkan_devices:"
@@ -108,6 +131,8 @@ jobs:
           path: |
             fused-box-benchmark.csv
             fused-box-environment.txt
+            vulkaninfo-summary.txt
+            webgpu-adapter-info.txt
           if-no-files-found: warn
           retention-days: 14
 
@@ -206,7 +231,7 @@ jobs:
       - name: Install combined runtime prerequisites
         run: |
           sudo apt-get update
-          sudo apt-get install -y libexpat1-dev mesa-vulkan-drivers
+          sudo apt-get install -y libexpat1-dev mesa-vulkan-drivers vulkan-tools
 
       - name: Install Geant4 runtime datasets
         shell: bash
@@ -221,6 +246,20 @@ jobs:
           test -d /tmp/geant4-data/G4ENSDFSTATE3.0
           test -d /tmp/geant4-data/G4EMLOW9.0
           test -d /tmp/geant4-data/PhotonEvaporation6.1.2
+
+      - name: Restrict Vulkan loader to Mesa lavapipe
+        shell: bash
+        run: |
+          set -euo pipefail
+          icd="$(find /usr/share/vulkan/icd.d -maxdepth 1 -name 'lvp_icd*.json' -print -quit)"
+          test -n "$icd" && test -f "$icd"
+          echo "VK_ICD_FILENAMES=$icd" >> "$GITHUB_ENV"
+          echo "VK_DRIVER_FILES=$icd" >> "$GITHUB_ENV"
+          echo "WGPU_BACKEND=vulkan" >> "$GITHUB_ENV"
+          echo "G4WGPU_EXPECT_SOFTWARE_VULKAN=1" >> "$GITHUB_ENV"
+          VK_ICD_FILENAMES="$icd" VK_DRIVER_FILES="$icd" vulkaninfo --summary > vulkaninfo-summary.txt
+          cat vulkaninfo-summary.txt
+          grep -Eiq '(llvmpipe|lavapipe)' vulkaninfo-summary.txt
 
       - name: Build pinned wgpu-native
         shell: bash

@@ -56,3 +56,17 @@ replacing Geant4's CPU navigator.
 
 See [fused benchmark](flat-box-fused-benchmark.md) and
 [fused Box limitations](flat-box-fused-webgpu.md).
+
+
+## Software Vulkan GitHub Actions 검증의 경계
+
+GitHub Actions에서 `vulkaninfo` 장치 목록만 기록하는 것으로는 실제
+`WebGpuBackend`가 선택한 adapter가 무엇인지 증명할 수 없다.
+따라서 선택된 adapter 정보를 `wgpuAdapterGetInfo`로 직접 확인하고,
+`WGPU_BACKEND=vulkan` 및 Mesa lavapipe ICD를 지정한다.
+실제로 선택된 Vulkan CPU adapter를 출력·검증하며, 간단한 WGSL 실행까지
+성공해야 `webgpu-compile-link` Job을 통과한다.
+원시 adapter 정보와 ICD 요약은 CI artifact에 남긴다.
+
+이 검증은 **소프트웨어 WGSL 계산이 실제 실행되었다는 증거**이지
+물리 GPU 가속, GPU 메모리 처리량 또는 제조사별 호환성의 증거는 아니다.

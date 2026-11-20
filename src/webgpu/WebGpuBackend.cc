@@ -789,6 +789,34 @@ class WebGpuBackend::Impl {
     }
     adapter = adapter_state.adapter;
 
+    // Inspect the adapter selected by wgpu-native itself, not just the
+    // list of devices that the Vulkan loader could enumerate.
+    WGPUAdapterInfo selected = WGPU_ADAPTER_INFO_INIT;
+    if (wgpuAdapterGetInfo(adapter, &selected) != WGPUStatus_Success) {
+      wgpuAdapterInfoFreeMembers(selected);
+      throw std::runtime_error("wgpuAdapterGetInfo failed");
+    }
+    WebGpuAdapterInfo snapshot;
+    snapshot.device = copy_message(selected.device);
+    snapshot.description = copy_message(selected.description);
+    switch (selected.backendType) {
+      case WGPUBackendType_Vulkan: snapshot.backend = "vulkan"; break;
+      case WGPUBackendType_Metal: snapshot.backend = "metal"; break;
+      case WGPUBackendType_D3D12: snapshot.backend = "d3d12"; break;
+      case WGPUBackendType_OpenGL: snapshot.backend = "opengl"; break;
+      default: snapshot.backend = "other"; break;
+    }
+    switch (selected.adapterType) {
+      case WGPUAdapterType_CPU: snapshot.adapter_type = "cpu"; break;
+      case WGPUAdapterType_DiscreteGPU:
+        snapshot.adapter_type = "discrete-gpu"; break;
+      case WGPUAdapterType_IntegratedGPU:
+        snapshot.adapter_type = "integrated-gpu"; break;
+      default: snapshot.adapter_type = "unknown"; break;
+    }
+    wgpuAdapterInfoFreeMembers(selected);
+    selected_adapter = std::move(snapshot);
+
     DeviceRequestState device_state;
     WGPURequestDeviceCallbackInfo device_callback =
         WGPU_REQUEST_DEVICE_CALLBACK_INFO_INIT;
@@ -1549,6 +1577,7 @@ class WebGpuBackend::Impl {
     return candidates;
   }
 
+  WebGpuAdapterInfo selected_adapter;
   WGPUInstance instance = nullptr;
   WGPUAdapter adapter = nullptr;
   WGPUDevice device = nullptr;
@@ -1573,6 +1602,10 @@ WebGpuBackend& WebGpuBackend::operator=(WebGpuBackend&&) noexcept = default;
 
 std::string_view WebGpuBackend::name() const noexcept {
   return "webgpu/wgpu-native";
+}
+
+const WebGpuAdapterInfo& WebGpuBackend::adapter_info() const noexcept {
+  return impl_->selected_adapter;
 }
 
 void WebGpuBackend::axpy(const double a, const std::vector<double>& x,
