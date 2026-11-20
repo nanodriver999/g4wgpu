@@ -1,6 +1,7 @@
 #include "g4wgpu/FlatBoxNavigationWebGpu.hh"
 #include "g4wgpu/WebGpuBackend.hh"
 
+#include <chrono>
 #include <cmath>
 #include <limits>
 #include <stdexcept>
@@ -171,7 +172,14 @@ std::vector<FlatBoundary> flat_box_next_boundary_webgpu_fused_batch(
     const std::vector<BoxRay>& rays,
     FlatBoxGpuBatchStats* stats,
     const double absolute_tolerance_mm,
-    const double relative_tolerance) {
+    const double relative_tolerance,
+    FlatBoxStageTimings* timings) {
+  const auto start = std::chrono::steady_clock::now();
+  const auto ms = [&](const auto from) {
+    return std::chrono::duration<double, std::milli>(
+        std::chrono::steady_clock::now() - from).count();
+  };
+  if (timings != nullptr) *timings = {};
   if (!std::isfinite(absolute_tolerance_mm) ||
       !std::isfinite(relative_tolerance) ||
       absolute_tolerance_mm < 0.0 || relative_tolerance < 0.0) {
@@ -184,9 +192,11 @@ std::vector<FlatBoundary> flat_box_next_boundary_webgpu_fused_batch(
     (void)flat_box_next_boundary_mm(
         scene, BoxVector3{}, BoxVector3{1.0, 0.0, 0.0});
     if (stats != nullptr) *stats = diagnostics;
+    if (timings != nullptr) timings->total_ms = ms(start);
     return {};
   }
 
+  const auto validation_start = std::chrono::steady_clock::now();
   // The independent f64 CPU reference still validates the complete
   // scene, each direction, and every ray. This is deliberately not
   // a performance comparison or an authoritative navigator.
@@ -196,6 +206,9 @@ std::vector<FlatBoundary> flat_box_next_boundary_webgpu_fused_batch(
     reference.push_back(flat_box_next_boundary_mm(
         scene, ray.position_mm, ray.direction));
   }
+  if (timings != nullptr)
+    timings->cpu_reference_ms = ms(validation_start);
+  const auto eligibility_start = std::chrono::steady_clock::now();
 
   bool supported = f32_box(scene.world) &&
                    scene.daughters.size() <= 64u &&
@@ -211,14 +224,20 @@ std::vector<FlatBoundary> flat_box_next_boundary_webgpu_fused_batch(
           local(ray.position_mm, daughter.center_mm));
     }
   }
+  if (timings != nullptr)
+    timings->eligibility_ms = ms(eligibility_start);
   if (!supported) {
     diagnostics.cpu_reference_fallbacks = rays.size();
     if (stats != nullptr) *stats = diagnostics;
+    if (timings != nullptr) timings->total_ms = ms(start);
     return reference;
   }
 
+  const auto gpu_start = std::chrono::steady_clock::now();
   std::vector<FlatBoundary> candidates =
-      gpu.flat_box_fused_candidates_batch(scene, rays);
+      gpu.flat_box_fused_candidates_batch(scene, rays, timings);
+  if (timings != nullptr)
+    timings->gpu_call_ms = ms(gpu_start);
   diagnostics.gpu_box_dispatches = 1u;
   diagnostics.gpu_fused_dispatches = 1u;
   if (candidates.size() != rays.size()) {
@@ -226,12 +245,17 @@ std::vector<FlatBoundary> flat_box_next_boundary_webgpu_fused_batch(
         "fused flat Box GPU returned wrong ray count");
   }
 
+  const auto reconcile_start = std::chrono::steady_clock::now();
   for (std::size_t i = 0; i < rays.size(); ++i) {
     if (!agrees(candidates[i], reference[i],
                 absolute_tolerance_mm, relative_tolerance)) {
       candidates[i] = reference[i];
       ++diagnostics.cpu_reference_fallbacks;
     }
+  }
+  if (timings != nullptr) {
+    timings->reconcile_ms = ms(reconcile_start);
+    timings->total_ms = ms(start);
   }
   if (stats != nullptr) *stats = diagnostics;
   return candidates;

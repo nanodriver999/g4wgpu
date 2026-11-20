@@ -132,8 +132,26 @@ int main() {
   }
 
   g4wgpu::FlatBoxGpuBatchStats stats;
+  g4wgpu::FlatBoxStageTimings stages;
   const auto checked = g4wgpu::flat_box_next_boundary_webgpu_fused_batch(
-      backend, scene, rays, &stats);
+      backend, scene, rays, &stats, 5e-4, 5e-5, &stages);
+  const double observations[]{
+      stages.cpu_reference_ms, stages.eligibility_ms,
+      stages.backend_preflight_ms, stages.staging_ms,
+      stages.pipeline_ms, stages.resources_ms, stages.upload_ms,
+      stages.submit_ms, stages.readback_ms, stages.decode_ms,
+      stages.reconcile_ms, stages.gpu_call_ms, stages.total_ms};
+  for (const double duration : observations) {
+    if (!std::isfinite(duration) || duration < 0.0) {
+      std::cerr << "Invalid fused GPU host-stage timing\n";
+      return EXIT_FAILURE;
+    }
+  }
+  if (!(stages.total_ms > 0.0) ||
+      stages.gpu_call_ms > stages.total_ms + 0.01) {
+    std::cerr << "Fused GPU timing does not enclose GPU call\n";
+    return EXIT_FAILURE;
+  }
   if (checked.size() != rays.size() ||
       stats.gpu_box_dispatches != 1u ||
       stats.gpu_fused_dispatches != 1u ||

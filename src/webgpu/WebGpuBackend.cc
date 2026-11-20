@@ -1322,7 +1322,15 @@ class WebGpuBackend::Impl {
 
   std::vector<FlatBoundary> flat_box_fused_candidates_batch(
       const FlatBoxScene& scene,
-      const std::vector<BoxRay>& rays) {
+      const std::vector<BoxRay>& rays,
+      FlatBoxStageTimings* timings) {
+    // Host timings, not GPU timestamp queries. Individual stages
+    // intentionally exclude unrelated allocations/setup where possible.
+    const auto now = [] { return std::chrono::steady_clock::now(); };
+    const auto ms = [&](const auto start) {
+      return std::chrono::duration<double, std::milli>(now() - start).count();
+    };
+    auto began = now();
     constexpr std::size_t kMaxRays = 8192u;
     constexpr std::size_t kMaxDaughters = 64u;
     if (rays.size() > kMaxRays ||
@@ -1342,6 +1350,8 @@ class WebGpuBackend::Impl {
       (void)flat_box_next_boundary_mm(
           scene, ray.position_mm, ray.direction);
     }
+    if (timings != nullptr) timings->backend_preflight_ms = ms(began);
+    began = now();
 
     const auto narrow = [](const double x) -> float {
       if (!std::isfinite(x) ||
@@ -1403,6 +1413,8 @@ class WebGpuBackend::Impl {
         shapes.size() * sizeof(GpuFlatBox);
     const std::uint64_t output_bytes =
         rays.size() * sizeof(GpuFlatResult);
+    if (timings != nullptr) timings->staging_ms = ms(began);
+    began = now();
 
     // Compile once per backend instance. The compiled module/pipeline
     // outlive per-dispatch staging buffers and are released before the
@@ -1433,6 +1445,8 @@ class WebGpuBackend::Impl {
       flat_box_fused_pipeline = new_pipeline;
       ++flat_box_fused_pipeline_creations;
     }
+    if (timings != nullptr) timings->pipeline_ms = ms(began);
+    began = now();
 
     DispatchResources resources;
     resources.x_buffer = create_buffer(
@@ -1488,6 +1502,8 @@ class WebGpuBackend::Impl {
     if (resources.bind_group == nullptr) {
       throw std::runtime_error("flat Box bind group creation failed");
     }
+    if (timings != nullptr) timings->resources_ms = ms(began);
+    began = now();
 
     wgpuQueueWriteBuffer(
         queue, resources.x_buffer, 0, staged.data(), ray_bytes);
@@ -1496,6 +1512,8 @@ class WebGpuBackend::Impl {
         shapes.data(), shape_bytes);
     wgpuQueueWriteBuffer(
         queue, resources.params_buffer, 0, &params, sizeof(params));
+    if (timings != nullptr) timings->upload_ms = ms(began);
+    began = now();
 
     WGPUCommandEncoderDescriptor encoder_desc =
         WGPU_COMMAND_ENCODER_DESCRIPTOR_INIT;
@@ -1535,6 +1553,8 @@ class WebGpuBackend::Impl {
       throw std::runtime_error("flat Box command creation failed");
     }
     wgpuQueueSubmit(queue, 1u, &resources.command_buffer);
+    if (timings != nullptr) timings->submit_ms = ms(began);
+    began = now();
 
     BufferMapState map_state;
     WGPUBufferMapCallbackInfo callback =
@@ -1561,6 +1581,8 @@ class WebGpuBackend::Impl {
     std::memcpy(output.data(), mapped,
                 static_cast<std::size_t>(output_bytes));
     wgpuBufferUnmap(resources.readback_buffer);
+    if (timings != nullptr) timings->readback_ms = ms(began);
+    began = now();
 
     std::vector<FlatBoundary> candidates;
     candidates.reserve(output.size());
@@ -1574,6 +1596,7 @@ class WebGpuBackend::Impl {
           static_cast<double>(item.distance_mm),
           item.daughter_id});
     }
+    if (timings != nullptr) timings->decode_ms = ms(began);
     return candidates;
   }
 
@@ -1634,8 +1657,9 @@ void WebGpuBackend::axpy(const double a, const std::vector<double>& x,
 
 std::vector<FlatBoundary> WebGpuBackend::flat_box_fused_candidates_batch(
     const FlatBoxScene& scene,
-    const std::vector<BoxRay>& rays) {
-  return impl_->flat_box_fused_candidates_batch(scene, rays);
+    const std::vector<BoxRay>& rays,
+    FlatBoxStageTimings* timings) {
+  return impl_->flat_box_fused_candidates_batch(scene, rays, timings);
 }
 
 std::size_t WebGpuBackend::flat_box_fused_pipeline_creations()

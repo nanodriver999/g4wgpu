@@ -7,6 +7,7 @@
 
 #include "g4wgpu/BoxGeometry.hh"
 #include "g4wgpu/FlatBoxNavigation.hh"
+#include "g4wgpu/FlatBoxStageTimings.hh"
 #include "g4wgpu/OrbGeometry.hh"
 #include "g4wgpu/TubsGeometry.hh"
 #include "g4wgpu/ComputeBackend.hh"
@@ -47,7 +48,8 @@ class WebGpuBackend final : public ComputeBackend, public PhysicsBackend {
   // and MUST be compared with the CPU reference before any transport use.
   // Bounded prototype: <=8192 rays and <=64 daughters per call.
   std::vector<FlatBoundary> flat_box_fused_candidates_batch(
-      const FlatBoxScene& scene, const std::vector<BoxRay>& rays);
+      const FlatBoxScene& scene, const std::vector<BoxRay>& rays,
+      FlatBoxStageTimings* timings = nullptr);
 
   // Experimental diagnostic: count successful WGSL pipeline creations.
   // After the first nonempty fused batch, repeated calls must reuse it.
