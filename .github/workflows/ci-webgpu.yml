@@ -19,7 +19,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Test fused benchmark CSV validator contract
-        run: python3 -m unittest discover -s tests/integration -p 'test_fused_benchmark_csv_validator.py' -v
+        run: |
+          python3 -m unittest discover -s tests/integration -p 'test_fused_benchmark_csv_validator.py' -v
+          python3 -m unittest discover -s tests/integration -p 'test_fused_stage_csv_validator.py' -v
 
       - name: Configure CPU build
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -100,9 +102,11 @@ jobs:
         run: |
           # The executable checks every GPU result against the CPU f64 oracle.
           # Wall-time CSV is diagnostic only; no speedup threshold is enforced.
-          timeout 180s ./build-wgpu/g4wgpu_flat_box_fused_benchmark > fused-box-benchmark.csv
+          timeout 180s ./build-wgpu/g4wgpu_flat_box_fused_benchmark --stages-output fused-box-stages.csv > fused-box-benchmark.csv
           python3 tests/integration/validate_fused_benchmark_csv.py fused-box-benchmark.csv
+          python3 tests/integration/validate_fused_stage_csv.py fused-box-stages.csv
           cat fused-box-benchmark.csv
+          cat fused-box-stages.csv
 
       - name: Record fused benchmark execution environment
         if: always()
@@ -130,6 +134,7 @@ jobs:
           name: fused-box-benchmark-csv
           path: |
             fused-box-benchmark.csv
+            fused-box-stages.csv
             fused-box-environment.txt
             vulkaninfo-summary.txt
             webgpu-adapter-info.txt

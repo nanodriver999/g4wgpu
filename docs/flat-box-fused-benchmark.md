@@ -55,3 +55,27 @@ warmed-up end-to-end cost without changing the CSV schema or setting
 flaky numerical performance thresholds. Pipeline creation is counted and
 asserted to occur only once per WebGPU backend lifetime. Compare separate
 runs cautiously: shared CI load and software-renderer variance can dominate.
+
+## Host-stage diagnostic CSV (GitHub Actions PR #82)
+
+The existing `fused-box-benchmark.csv` schema is unchanged. Optionally run
+`g4wgpu_flat_box_fused_benchmark --stages-output fused-box-stages.csv` to
+produce one additional diagnostic row per (batch, repeat). The CI validator
+enforces the expected row count, finite nonnegative durations, dispatch
+and substitution counters and a loose enclosure relation; **it does not gate
+the speed of any stage**. This CSV is saved alongside the existing benchmark
+and WebGPU adapter metadata.
+
+The stages describe **host wall time**, not GPU hardware timestamps:
+`cpu_reference_ms` and `eligibility_ms` cover wrapper validation,
+`backend_preflight_ms` includes a second f64 reference check,
+`staging_ms` covers CPU packing, `pipeline_ms` covers lazy pipeline
+setup, `resources_ms` covers buffers and binding, `upload_ms`
+covers queue-write calls, `submit_ms` covers command encoding and submit,
+`readback_ms` includes the asynchronous map wait and CPU copy, and
+`decode_ms` covers result decoding. `reconcile_ms` is CPU tolerance
+comparison and substitutions. `gpu_call_ms` encloses backend work,
+and `total_ms` encloses the validated call. The nested totals must
+**not** be added to individual stages. GPU queue-write and submit calls
+can return asynchronously; host times cannot isolate pure shader execution
+or prove hardware overlap. Measurement overhead is itself nonzero.
