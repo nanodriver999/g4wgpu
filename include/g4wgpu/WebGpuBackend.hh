@@ -24,6 +24,13 @@ struct WebGpuAdapterInfo {
   std::string adapter_type;
 };
 
+// Per-backend counters for the experimental fused Box scene cache.
+// They measure allocation/upload behavior, not elapsed GPU time.
+struct FlatBoxSceneBufferStats {
+  std::size_t buffer_creations = 0;
+  std::size_t uploads = 0;
+};
+
 class WebGpuBackend final : public ComputeBackend, public PhysicsBackend {
  public:
   WebGpuBackend();
@@ -55,6 +62,9 @@ class WebGpuBackend final : public ComputeBackend, public PhysicsBackend {
   // After the first nonempty fused batch, repeated calls must reuse it.
   [[nodiscard]] std::size_t
   flat_box_fused_pipeline_creations() const noexcept;
+
+  [[nodiscard]] FlatBoxSceneBufferStats
+  flat_box_scene_buffer_stats() const noexcept;
 
   // Experimental standalone Box ray-entry kernel: the result is advisory
   // and is never promoted into Geant4 navigation without further validation.
