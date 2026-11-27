@@ -705,6 +705,7 @@ struct DispatchResources {
   WGPUComputePipeline pipeline = nullptr;
   WGPUBuffer x_buffer = nullptr;
   WGPUBuffer geometry_buffer = nullptr;
+  bool geometry_buffer_borrowed = false;
   WGPUBuffer y_buffer = nullptr;
   WGPUBuffer params_buffer = nullptr;
   WGPUBuffer readback_buffer = nullptr;
@@ -738,7 +739,7 @@ struct DispatchResources {
     if (x_buffer != nullptr) {
       wgpuBufferRelease(x_buffer);
     }
-    if (geometry_buffer != nullptr) {
+    if (geometry_buffer != nullptr && !geometry_buffer_borrowed) {
       wgpuBufferRelease(geometry_buffer);
     }
     if (pipeline != nullptr) {
@@ -1484,7 +1485,8 @@ class WebGpuBackend::Impl {
       flat_box_cached_shapes.clear();
       ++flat_box_scene_buffer_creations;
     }
-    resources.geometry_buffer = flat_box_scene_buffer;  // borrowed
+    resources.geometry_buffer = flat_box_scene_buffer;
+    resources.geometry_buffer_borrowed = true;
     resources.y_buffer = create_buffer(
         device, "g4wgpu_flat_box_results", output_bytes,
         WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
@@ -1630,9 +1632,6 @@ class WebGpuBackend::Impl {
           item.daughter_id});
     }
     if (timings != nullptr) timings->decode_ms = ms(began);
-    // DispatchResources borrows this buffer. Prevent its destructor from
-    // releasing the backend-owned scene cache.
-    resources.geometry_buffer = nullptr;
     return candidates;
   }
 
