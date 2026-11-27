@@ -860,6 +860,12 @@ class WebGpuBackend::Impl {
   }
 
   void release() noexcept {
+    // The cached scene buffer belongs to the backend, never to a dispatch.
+    if (flat_box_scene_buffer != nullptr) {
+      wgpuBufferRelease(flat_box_scene_buffer);
+      flat_box_scene_buffer = nullptr;
+    }
+    flat_box_cached_shapes.clear();
     if (flat_box_fused_pipeline != nullptr) {
       wgpuComputePipelineRelease(flat_box_fused_pipeline);
       flat_box_fused_pipeline = nullptr;
@@ -1452,9 +1458,33 @@ class WebGpuBackend::Impl {
     resources.x_buffer = create_buffer(
         device, "g4wgpu_flat_box_rays", ray_bytes,
         WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
-    resources.geometry_buffer = create_buffer(
-        device, "g4wgpu_flat_box_shapes", shape_bytes,
-        WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+    // Cache only the immutable shape descriptor buffer on this backend.
+    // Ray/result buffers remain per-call until the next roadmap milestone.
+    // Comparing actual staged descriptors avoids relying on caller identity
+    // or a hash with collisions. f64 inputs have already been validated.
+    const bool shape_buffer_changed =
+        flat_box_scene_buffer == nullptr ||
+        flat_box_cached_shapes.size() != shapes.size() ||
+        std::memcmp(flat_box_cached_shapes.data(), shapes.data(),
+                    static_cast<std::size_t>(shape_bytes)) != 0;
+    if (flat_box_scene_buffer == nullptr ||
+        flat_box_cached_shapes.size() != shapes.size()) {
+      WGPUBuffer new_buffer = create_buffer(
+          device, "g4wgpu_flat_box_shapes", shape_bytes,
+          WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst);
+      if (new_buffer == nullptr) {
+        throw std::runtime_error("failed to allocate flat Box scene buffer");
+      }
+      // No dispatch can still be using the previous scene buffer: this
+      // experimental backend completes readback before each call returns.
+      if (flat_box_scene_buffer != nullptr) {
+        wgpuBufferRelease(flat_box_scene_buffer);
+      }
+      flat_box_scene_buffer = new_buffer;
+      flat_box_cached_shapes.clear();
+      ++flat_box_scene_buffer_creations;
+    }
+    resources.geometry_buffer = flat_box_scene_buffer;  // borrowed
     resources.y_buffer = create_buffer(
         device, "g4wgpu_flat_box_results", output_bytes,
         WGPUBufferUsage_Storage | WGPUBufferUsage_CopySrc);
@@ -1507,9 +1537,12 @@ class WebGpuBackend::Impl {
 
     wgpuQueueWriteBuffer(
         queue, resources.x_buffer, 0, staged.data(), ray_bytes);
-    wgpuQueueWriteBuffer(
-        queue, resources.geometry_buffer, 0,
-        shapes.data(), shape_bytes);
+    if (shape_buffer_changed) {
+      wgpuQueueWriteBuffer(
+          queue, resources.geometry_buffer, 0, shapes.data(), shape_bytes);
+      flat_box_cached_shapes = shapes;
+      ++flat_box_scene_uploads;
+    }
     wgpuQueueWriteBuffer(
         queue, resources.params_buffer, 0, &params, sizeof(params));
     if (timings != nullptr) timings->upload_ms = ms(began);
@@ -1597,6 +1630,9 @@ class WebGpuBackend::Impl {
           item.daughter_id});
     }
     if (timings != nullptr) timings->decode_ms = ms(began);
+    // DispatchResources borrows this buffer. Prevent its destructor from
+    // releasing the backend-owned scene cache.
+    resources.geometry_buffer = nullptr;
     return candidates;
   }
 
@@ -1613,6 +1649,10 @@ class WebGpuBackend::Impl {
   WGPUShaderModule flat_box_fused_shader = nullptr;
   WGPUComputePipeline flat_box_fused_pipeline = nullptr;
   std::size_t flat_box_fused_pipeline_creations = 0u;
+  WGPUBuffer flat_box_scene_buffer = nullptr;
+  std::vector<GpuFlatBox> flat_box_cached_shapes;
+  std::size_t flat_box_scene_buffer_creations = 0u;
+  std::size_t flat_box_scene_uploads = 0u;
 };
 
 WebGpuBackend::WebGpuBackend() : impl_(std::make_unique<Impl>()) {}
@@ -1665,6 +1705,12 @@ std::vector<FlatBoundary> WebGpuBackend::flat_box_fused_candidates_batch(
 std::size_t WebGpuBackend::flat_box_fused_pipeline_creations()
     const noexcept {
   return impl_->flat_box_fused_pipeline_creations;
+}
+
+FlatBoxSceneBufferStats WebGpuBackend::flat_box_scene_buffer_stats()
+    const noexcept {
+  return {impl_->flat_box_scene_buffer_creations,
+          impl_->flat_box_scene_uploads};
 }
 
 std::vector<double> WebGpuBackend::box_distance_to_in_batch(
