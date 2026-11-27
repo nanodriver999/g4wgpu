@@ -170,6 +170,102 @@ int main() {
     }
   }
 
+  // PR #83: same scene reuses both allocation and upload across calls.
+  const auto first_scene_stats = backend.flat_box_scene_buffer_stats();
+  if (first_scene_stats.buffer_creations != 1u ||
+      first_scene_stats.uploads != 1u) {
+    std::cerr << "Fused scene was reallocated or uploaded unnecessarily\\n";
+    return EXIT_FAILURE;
+  }
+  const auto repeated = backend.flat_box_fused_candidates_batch(scene, rays);
+  const auto repeated_stats = backend.flat_box_scene_buffer_stats();
+  if (repeated_stats.buffer_creations != 1u ||
+      repeated_stats.uploads != 1u ||
+      repeated.size() != raw.size()) {
+    std::cerr << "Identical fused scene did not hit cache\\n";
+    return EXIT_FAILURE;
+  }
+  for (std::size_t i = 0; i < raw.size(); ++i) {
+    if (!equivalent(repeated[i], raw[i])) {
+      std::cerr << "Scene cache reuse changed GPU candidate\\n";
+      return EXIT_FAILURE;
+    }
+  }
+
+  // Mutation with the same descriptor count requires an upload, but not
+  // a new allocation. Check raw shader output against the f64 reference.
+  auto moved_scene = scene;
+  moved_scene.daughters[2].center_mm.z += 2.0;
+  const auto moved = backend.flat_box_fused_candidates_batch(
+      moved_scene, rays);
+  const auto moved_stats = backend.flat_box_scene_buffer_stats();
+  if (moved_stats.buffer_creations != 1u ||
+      moved_stats.uploads != 2u || moved.size() != rays.size()) {
+    std::cerr << "Equal-size scene mutation did not invalidate upload\\n";
+    return EXIT_FAILURE;
+  }
+  for (std::size_t i = 0; i < rays.size(); ++i) {
+    if (!equivalent(moved[i], g4wgpu::flat_box_next_boundary_mm(
+            moved_scene, rays[i].position_mm, rays[i].direction))) {
+      std::cerr << "Scene mutation produced stale GPU descriptors\\n";
+      return EXIT_FAILURE;
+    }
+  }
+  // Shrinking the scene changes the binding size and needs a new buffer.
+  auto smaller_scene = scene;
+  smaller_scene.daughters.pop_back();
+  const auto smaller = backend.flat_box_fused_candidates_batch(
+      smaller_scene, rays);
+  const auto smaller_stats = backend.flat_box_scene_buffer_stats();
+  if (smaller_stats.buffer_creations != 2u ||
+      smaller_stats.uploads != 3u || smaller.size() != rays.size()) {
+    std::cerr << "Resized scene did not reallocate and upload\\n";
+    return EXIT_FAILURE;
+  }
+  for (std::size_t i = 0; i < rays.size(); ++i) {
+    if (!equivalent(smaller[i], g4wgpu::flat_box_next_boundary_mm(
+            smaller_scene, rays[i].position_mm, rays[i].direction))) {
+      std::cerr << "Resized scene returned stale GPU results\\n";
+      return EXIT_FAILURE;
+    }
+  }
+
+  // Restoring the original scene must not reuse descriptors from a
+  // different-sized geometry, and the pipeline still stays compiled once.
+  const auto restored = backend.flat_box_fused_candidates_batch(scene, rays);
+  const auto restored_stats = backend.flat_box_scene_buffer_stats();
+  if (restored_stats.buffer_creations != 3u ||
+      restored_stats.uploads != 4u ||
+      backend.flat_box_fused_pipeline_creations() != 1u ||
+      restored.size() != raw.size()) {
+    std::cerr << "Restored scene cache or pipeline accounting failed\\n";
+    return EXIT_FAILURE;
+  }
+  for (std::size_t i = 0; i < raw.size(); ++i) {
+    if (!equivalent(restored[i], raw[i])) {
+      std::cerr << "Restored scene changed GPU candidates\\n";
+      return EXIT_FAILURE;
+    }
+  }
+
+  // A second WebGPU backend must never share GPU resource handles/cache.
+  {
+    g4wgpu::WebGpuBackend other;
+    if (other.flat_box_scene_buffer_stats().buffer_creations != 0u ||
+        other.flat_box_scene_buffer_stats().uploads != 0u) {
+      std::cerr << "New backend inherited another scene cache\\n";
+      return EXIT_FAILURE;
+    }
+    const auto other_result = other.flat_box_fused_candidates_batch(
+        scene, std::vector<Ray>(rays.begin(), rays.begin() + 14));
+    if (other_result.size() != 14u ||
+        other.flat_box_scene_buffer_stats().buffer_creations != 1u ||
+        other.flat_box_scene_buffer_stats().uploads != 1u) {
+      std::cerr << "Independent backend scene cache failed\\n";
+      return EXIT_FAILURE;
+    }
+  }
+
   // Test the previous multi-dispatch path is still usable and gives
   // equivalent results for the representative subset.
   std::vector<Ray> subset(rays.begin(), rays.begin() + 14);
